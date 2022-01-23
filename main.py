@@ -3,6 +3,7 @@ from argparse import Namespace
 import os
 import pickle
 
+from torch.utils.tensorboard import SummaryWriter
 import torch
 from torch_geometric.datasets import TUDataset
 
@@ -18,6 +19,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--batch_size', type=int, default=8, )
     parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--data_path', type=str, default='./datasets')
+    parser.add_argument('--log_path', type=str, default='./logs')
 
     return parser.parse_args()
 
@@ -32,6 +34,10 @@ if __name__ == '__main__':
         dataset = TUDataset(args.data_path, name="ZINC_full")
     else:
         raise NotImplementedError
+
+    if not os.path.isdir(args.log_path):
+        os.mkdir(args.log_path)
+    writer = SummaryWriter(args.log_path)
 
     # TODO: use full indices
     with open(os.path.join(args.data_path, 'indices', 'train_indices.pkl'), 'rb') as handle:
@@ -50,7 +56,7 @@ if __name__ == '__main__':
     val_loader = MYDataLoader(dataset[225011:][val_indices], batch_size=args.batch_size, shuffle=True, n_subgraphs=0)
 
     if args.model.lower() == 'gine':
-        model = NetGINE(args.hid_size)
+        model = NetGINE(args.hid_size).to(device)
     else:
         raise NotImplementedError
 
@@ -86,3 +92,5 @@ if __name__ == '__main__':
         print(f'epoch: {epoch}, '
               f'training loss: {train_losses / len(train_loader.dataset)}, '
               f'val loss: {val_losses / len(val_loader.dataset)}')
+        writer.add_scalar('loss/training loss', train_losses / len(train_loader.dataset), epoch)
+        writer.add_scalar('loss/val loss', val_losses / len(val_loader.dataset), epoch)

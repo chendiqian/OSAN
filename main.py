@@ -65,7 +65,6 @@ if __name__ == '__main__':
 
     emb_model = NetGCN(28, args.hid_size, args.num_subgraphs).to(device)
 
-    # TODO: link embedding model with training model with I-MLE
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.L1Loss()
 

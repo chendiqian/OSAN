@@ -6,46 +6,18 @@ from torch import Tensor
 from torch.utils.data.dataloader import default_collate
 from torch_geometric.loader.dataloader import Collater
 from torch_geometric.data import Batch, Data, Dataset, HeteroData
-from torch_geometric.utils import subgraph
+
+from sample_subgraph import rand_sampling
 
 
-@torch.no_grad()
-def subgraph_sampling(graph: Data,
-                      n_subgraphs: int,
-                      n_drop_nodes: int = 1) -> Tuple[List[Data], int]:
+class SampleCollater:
     """
-    Sample subgraphs.
-    TODO: replace for-loop with functorch.vmap https://pytorch.org/tutorials/prototype/vmap_recipe.html?highlight=vmap
-
-
-    :param graph:
-    :param n_subgraphs:
-    :param n_drop_nodes:
-    :return:
-        A list of graphs and their index masks
+    Customized data collater
+    Return batches with randomly sampled subgraphs
+    e.g.
+    Given a batch of graphs [g1, g2, g3 ...] from the dataset
+    Returns augmented batch of [g1_1, g1_2, g1_3, g2_1, g2_2, g2_3, ...]
     """
-
-    n_nodes = graph.x.shape[0]
-    res_list = []
-    batch_num_nodes = 0
-    for i in range(n_subgraphs):
-        indices = torch.randperm(n_nodes)[:-n_drop_nodes]
-        sort_indices = torch.sort(indices).values
-        batch_num_nodes += indices
-        edge_index, edge_attr = subgraph(sort_indices, graph.edge_index, graph.edge_attr, relabel_nodes=True)
-        res_list.append(
-            Data(
-                x=graph.x[sort_indices, :],
-                edge_index=edge_index,
-                edge_attr=edge_attr,
-                y=graph.y
-            )
-        )
-
-    return res_list, batch_num_nodes
-
-
-class MyCollater:
     def __init__(self,
                  n_subgraphs: int = 0,
                  follow_batch: Optional[List[str]] = None,
@@ -62,7 +34,7 @@ class MyCollater:
         graph_list = []
         inter_graph_idx = []
         for i, g in enumerate(batch):
-            subgraphs, _ = subgraph_sampling(g, self.n_subgraphs)
+            subgraphs, _ = rand_sampling(g, self.n_subgraphs)
             graph_list += subgraphs
             inter_graph_idx += torch.full((self.n_subgraphs,), i)
 
@@ -73,9 +45,10 @@ class MyCollater:
         res_data.inter_graph_idx = inter_graph_idx
         inter_graph_idx_aux = torch.cat((torch.tensor([-1]), inter_graph_idx), dim=0)
         ptr = (inter_graph_idx_aux[1:] > inter_graph_idx_aux[:-1]).nonzero().reshape(-1)
-        res_data.inter_graph_ptr = ptr
 
-        # TODO: duplicate labels or aggregate the embeddings for original labels?
+        # TODO: duplicate labels or aggregate the embeddings for original labels? potential problem: cannot split the
+        #  batch because y shape inconsistent:
+        #  https://pytorch-geometric.readthedocs.io/en/latest/modules/data.html#torch_geometric.data.Batch.to_data_list
         res_data.y = res_data.y[ptr]
 
         return res_data
@@ -112,7 +85,7 @@ class MYDataLoader(torch.utils.data.DataLoader):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 
-        collate_fn = partial(MyCollater, n_subgraphs=n_subgraphs) if n_subgraphs > 0 else Collater
+        collate_fn = partial(SampleCollater, n_subgraphs=n_subgraphs) if n_subgraphs > 0 else Collater
 
         super().__init__(
             dataset,

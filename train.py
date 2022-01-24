@@ -11,8 +11,8 @@ from custom_dataloder import MYDataLoader
 from sample_subgraph import subgraphs_from_index
 
 
-Optimizer = Union[torch.optim.adam.Adam,
-                  torch.optim.sgd.SGD]
+Optimizer = Union[torch.optim.Adam,
+                  torch.optim.SGD]
 Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
@@ -24,7 +24,7 @@ def train(sample_k: int,
           model: Train_model,
           optimizer: Optimizer,
           criterion: Loss,
-          device: Union[str, torch.device]) -> Union[torch.Tensor, torch.float, float]:
+          device: Union[str, torch.device]) -> Union[torch.Tensor, torch.FloatType, float]:
     """
     A train step
 

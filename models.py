@@ -65,18 +65,25 @@ class GINConv(MessagePassing):
     def __init__(self, emb_dim, dim1, dim2):
         super(GINConv, self).__init__(aggr="add")
 
-        self.bond_encoder = Sequential(Linear(emb_dim, dim1), ReLU(), Linear(dim1, dim1))
-        self.mlp = Sequential(Linear(dim1, dim1), ReLU(), Linear(dim1, dim2))
+        # disable the bias, otherwise the information will be nonzero
+        self.bond_encoder = Sequential(Linear(emb_dim, dim1, bias=False), ReLU(), Linear(dim1, dim1, bias=False))
+        self.mlp = Sequential(Linear(dim1, dim1, bias=False), ReLU(), Linear(dim1, dim2, bias=False))
         self.eps = torch.nn.Parameter(torch.Tensor([0]))
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x, edge_index, edge_attr, edge_weight=None):
+        if edge_weight is not None and edge_weight.ndim == 1:
+            edge_weight = edge_weight[:, None]
+
         edge_embedding = self.bond_encoder(edge_attr)
-        out = self.mlp((1 + self.eps) * x + self.propagate(edge_index, x=x, edge_attr=edge_embedding))
+        out = self.mlp((1 + self.eps) * x +
+                       self.propagate(edge_index, x=x, edge_attr=edge_embedding, edge_weight=edge_weight))
 
         return out
 
-    def message(self, x_j, edge_attr):
-        return torch.relu(x_j + edge_attr)
+    def message(self, x_j, edge_attr, edge_weight):
+        # x_j has shape [E, out_channels]
+        res = torch.relu(x_j + edge_attr)
+        return res * edge_weight if edge_weight is not None else res
 
     def update(self, aggr_out):
         return aggr_out

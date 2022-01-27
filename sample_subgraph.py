@@ -55,3 +55,33 @@ def subgraphs_from_index(graph: Data, indices: Tensor) -> List[Data]:
                            y=graph.y))
 
     return graphs
+
+
+def subgraphs_from_mask(graph: Data, masks: Tensor) -> List[Data]:
+    """
+    Return subgraphs containing gradients of mask
+
+    :param graph:
+    :param masks:
+    :return:
+    """
+    assert masks.dtype == torch.float
+    if masks.ndim < 2:
+        masks = masks[None]
+
+    edge_masks = masks[:, graph.edge_index[0]] * masks[:, graph.edge_index[1]]
+    idx_masks = masks.detach().to(torch.bool)
+
+    graphs = []
+    for i, (m, id_m, em) in enumerate(zip(masks, idx_masks, edge_masks)):
+
+        # relabel edge_index
+        edge_attr = graph.edge_attr * em[:, None]
+        edge_index, edge_attr = subgraph(id_m, graph.edge_index, edge_attr, relabel_nodes=True)
+        # multiply the mask then slice to obtain the gradient
+        graphs.append(Data(x=(graph.x * m[:, None])[id_m, :],
+                           edge_index=edge_index,
+                           edge_attr=edge_attr,
+                           y=graph.y))
+
+    return graphs

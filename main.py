@@ -9,7 +9,7 @@ from torch_geometric.datasets import TUDataset
 
 from custom_dataloder import MYDataLoader
 from models import NetGINE, NetGCN
-from train import train
+from train import train, validation
 
 
 def get_parse() -> Namespace:
@@ -52,11 +52,11 @@ if __name__ == '__main__':
     with open(os.path.join(args.data_path, 'indices', 'val_indices.pkl'), 'rb') as handle:
         val_indices = pickle.load(handle)[:32]
 
-    train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=True,
+    train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=False,
                                 n_subgraphs=0)
-    test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=True,
+    test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=False,
                                n_subgraphs=0)
-    val_loader = MYDataLoader(dataset[225011:][val_indices], batch_size=args.batch_size, shuffle=True, n_subgraphs=0)
+    val_loader = MYDataLoader(dataset[225011:][val_indices], batch_size=args.batch_size, shuffle=False, n_subgraphs=0)
 
     if args.model.lower() == 'gine':
         model = NetGINE(args.hid_size).to(device)
@@ -70,20 +70,10 @@ if __name__ == '__main__':
 
     for epoch in range(args.epochs):
         train_loss = train(args.sample_k, train_loader, emb_model, model, optimizer, criterion, device)
-
-        # TODO: implement val function
-        model.eval()
-        emb_model.eval()
-        val_losses = 0.
-        with torch.no_grad():
-            for data in val_loader:
-                data = data.to(device)
-                pred = model(data)
-                loss = criterion(pred, data.y)
-                val_losses += loss.item() * data.num_graphs
+        val_loss = validation(args.sample_k, val_loader, emb_model, model, criterion, device)
 
         print(f'epoch: {epoch}, '
               f'training loss: {train_loss}, '
-              f'val loss: {val_losses / len(val_loader.dataset)}')
+              f'val loss: {val_loss}')
         writer.add_scalar('loss/training loss', train_loss, epoch)
-        writer.add_scalar('loss/val loss', val_losses / len(val_loader.dataset), epoch)
+        writer.add_scalar('loss/val loss', val_loss, epoch)

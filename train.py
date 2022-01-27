@@ -21,7 +21,7 @@ Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
 
-def make_get_batch_topk(ptr, sample_k):
+def make_get_batch_topk(ptr, sample_k, return_list):
     @torch.no_grad()
     def torch_get_batch_topk(logits: torch.Tensor) -> torch.Tensor:
         """
@@ -31,17 +31,19 @@ def make_get_batch_topk(ptr, sample_k):
         :return:
         """
         logits = logits.detach()
-        logits = torch.tensor_split(logits, ptr)
+        logits = torch.split(logits, ptr)
 
         sample_node_idx = []
         for l in logits:
             thresh = torch.topk(l, k=min(sample_k, l.shape[0]), dim=0, sorted=True).values[-1, :]   # kth largest
             # shape (n_nodes, dim)
             mask = (l >= thresh[None]).to(torch.float)
+            mask.requires_grad = False
             sample_node_idx.append(mask)
 
-        sample_node_idx = torch.cat(sample_node_idx, dim=0)
-        sample_node_idx.requires_grad = False
+        if not return_list:
+            sample_node_idx = torch.cat(sample_node_idx, dim=0)
+            sample_node_idx.requires_grad = False
         return sample_node_idx
 
     return torch_get_batch_topk
@@ -71,7 +73,7 @@ def train(sample_k: int,
     train_losses = torch.tensor(0., device=device)
 
     target_distribution = TargetDistribution(alpha=1.0, beta=10.0)
-    noise_distribution = SumOfGammaNoiseDistribution(k=10, nb_iterations=100)
+    noise_distribution = SumOfGammaNoiseDistribution(k=10, nb_iterations=100, device=device)
 
     for data in dataloader:
         data = data.to(device)
@@ -79,7 +81,8 @@ def train(sample_k: int,
 
         logits = emb_model(data)
 
-        torch_get_batch_topk = make_get_batch_topk(data.ptr[1:-1], sample_k)
+        split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
+        torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=False)
 
         @imle(target_distribution=target_distribution,
               noise_distribution=noise_distribution,
@@ -91,18 +94,18 @@ def train(sample_k: int,
 
         sample_node_idx = imle_get_batch_topk(logits)
         # each mask has shape (n_nodes, hid_dims)
-        sample_node_idx = torch.tensor_split(sample_node_idx, data.ptr[1:-1])
+        sample_node_idx = torch.split(sample_node_idx, split_idx)
         graphs = Batch.to_data_list(data)
         list_subgraphs = [subgraphs_from_mask(g, i.T) for g, i in zip(graphs, sample_node_idx)]
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
         # new batch
         batch = Batch.from_data_list(list_subgraphs, None, None)
-        original_graph_mask = torch.cat([torch.full((idx.shape[1],), i)
+        original_graph_mask = torch.cat([torch.full((idx.shape[1],), i, device=device)
                                          for i, idx in enumerate(sample_node_idx)], dim=0)
-        ptr = torch.cat((torch.tensor([0]),
+        ptr = torch.cat((torch.tensor([0], device=device),
                          (original_graph_mask[1:] > original_graph_mask[:-1]).nonzero().reshape(-1) + 1,
-                         torch.tensor([len(original_graph_mask)])), dim=0)
+                         torch.tensor([len(original_graph_mask)], device=device)), dim=0)
         batch.inter_graph_idx = original_graph_mask
         batch.ptr = ptr
         batch.y = batch.y[ptr[:-1]]
@@ -132,21 +135,21 @@ def validation(sample_k: int,
         data = data.to(device)
         logits = emb_model(data)
 
-        torch_get_batch_topk = make_get_batch_topk(data.ptr[1:-1], sample_k)
+        split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
+        torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
         sample_node_idx = torch_get_batch_topk(logits)
         # each mask has shape (n_nodes, hid_dims)
-        sample_node_idx = torch.tensor_split(sample_node_idx, data.ptr[1:-1])
         graphs = Batch.to_data_list(data)
         list_subgraphs = [subgraphs_from_mask(g, i.T) for g, i in zip(graphs, sample_node_idx)]
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
         # new batch
         batch = Batch.from_data_list(list_subgraphs, None, None)
-        original_graph_mask = torch.cat([torch.full((idx.shape[1],), i)
+        original_graph_mask = torch.cat([torch.full((idx.shape[1],), i, device=device)
                                          for i, idx in enumerate(sample_node_idx)], dim=0)
-        ptr = torch.cat((torch.tensor([0]),
+        ptr = torch.cat((torch.tensor([0], device=device),
                          (original_graph_mask[1:] > original_graph_mask[:-1]).nonzero().reshape(-1) + 1,
-                         torch.tensor([len(original_graph_mask)])), dim=0)
+                         torch.tensor([len(original_graph_mask)], device=device)), dim=0)
         batch.inter_graph_idx = original_graph_mask
         batch.ptr = ptr
         batch.y = batch.y[ptr[:-1]]

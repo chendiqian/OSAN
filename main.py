@@ -52,6 +52,21 @@ if __name__ == '__main__':
     with open(os.path.join(args.data_path, 'indices', 'val_indices.pkl'), 'rb') as handle:
         val_indices = pickle.load(handle)[:32]
 
+    # infile = open("./datasets/indices/test.index.txt", "r")
+    # for line in infile:
+    #     indices_test = line.split(",")
+    #     indices_test = [int(i) for i in indices_test]
+    #
+    # infile = open("./datasets/indices/val.index.txt", "r")
+    # for line in infile:
+    #     indices_val = line.split(",")
+    #     indices_val = [int(i) for i in indices_val]
+    #
+    # infile = open("./datasets/indices/train.index.txt", "r")
+    # for line in infile:
+    #     indices_train = line.split(",")
+    #     indices_train = [int(i) for i in indices_train]
+
     train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=False,
                                 n_subgraphs=0)
     test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=False,

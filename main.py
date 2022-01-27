@@ -18,7 +18,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--dataset', type=str, default='zinc')
     parser.add_argument('--hid_size', type=int, default=256)
     parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument('--epochs', type=int, default=1)
+    parser.add_argument('--epochs', type=int, default=5)
     parser.add_argument('--sample_k', type=int, default=15, help='top-k nodes, i.e. n_nodes of each subgraph')
     parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
     parser.add_argument('--data_path', type=str, default='./datasets')
@@ -65,9 +65,10 @@ if __name__ == '__main__':
 
     emb_model = NetGCN(28, args.hid_size, args.num_subgraphs).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(list(emb_model.parameters()) + list(model.parameters()), lr=0.001)
     criterion = torch.nn.L1Loss()
 
+    torch.save(emb_model.state_dict(), './model1.pt')
     for epoch in range(args.epochs):
         train_loss = train(args.sample_k, train_loader, emb_model, model, optimizer, criterion, device)
         val_loss = validation(args.sample_k, val_loader, emb_model, model, criterion, device)
@@ -77,3 +78,4 @@ if __name__ == '__main__':
               f'val loss: {val_loss}')
         writer.add_scalar('loss/training loss', train_loss, epoch)
         writer.add_scalar('loss/val loss', val_loss, epoch)
+    torch.save(emb_model.state_dict(), './model2.pt')

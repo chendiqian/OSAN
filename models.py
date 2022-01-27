@@ -62,12 +62,12 @@ class NetGCN(torch.nn.Module):
 
 
 class GINConv(MessagePassing):
-    def __init__(self, emb_dim, dim1, dim2):
+    def __init__(self, emb_dim, dim1, dim2, use_bias=False):
         super(GINConv, self).__init__(aggr="add")
 
         # disable the bias, otherwise the information will be nonzero
-        self.bond_encoder = Sequential(Linear(emb_dim, dim1, bias=False), ReLU(), Linear(dim1, dim1, bias=False))
-        self.mlp = Sequential(Linear(dim1, dim1, bias=False), ReLU(), Linear(dim1, dim2, bias=False))
+        self.bond_encoder = Sequential(Linear(emb_dim, dim1, bias=use_bias), ReLU(), Linear(dim1, dim1, bias=use_bias))
+        self.mlp = Sequential(Linear(dim1, dim1, bias=use_bias), ReLU(), Linear(dim1, dim2, bias=use_bias))
         self.eps = torch.nn.Parameter(torch.Tensor([0]))
 
     def forward(self, x, edge_index, edge_attr, edge_weight=None):
@@ -90,49 +90,38 @@ class GINConv(MessagePassing):
 
 
 class NetGINE(torch.nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim, use_bias=False):
         super(NetGINE, self).__init__()
 
         num_features = 3
 
-        self.conv1 = GINConv(num_features, 28, dim)
-        self.bn1 = torch.nn.BatchNorm1d(dim)
+        self.conv1 = GINConv(num_features, 28, dim, use_bias)
+        # self.bn1 = torch.nn.BatchNorm1d(dim)
 
-        self.conv2 = GINConv(num_features, dim, dim)
-        self.bn2 = torch.nn.BatchNorm1d(dim)
+        self.conv2 = GINConv(num_features, dim, dim, use_bias)
+        # self.bn2 = torch.nn.BatchNorm1d(dim)
 
-        self.conv3 = GINConv(num_features, dim, dim)
-        self.bn3 = torch.nn.BatchNorm1d(dim)
-
-        self.conv4 = GINConv(num_features, dim, dim)
-        self.bn4 = torch.nn.BatchNorm1d(dim)
-
-        self.fc1 = Linear(4 * dim, dim)
+        self.fc1 = Linear(2 * dim, dim)
         self.fc2 = Linear(dim, dim)
-        self.fc3 = Linear(dim, dim)
-        self.fc4 = Linear(dim, 1)
+        self.fc3 = Linear(dim, 1)
 
     def forward(self, data):
-        x = data.x
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
+        edge_weight = data.edge_weight if hasattr(data, 'edge_weight') and data.edge_weight is not None else None
+        batch = data.batch if hasattr(data, 'batch') and data.batch is not None \
+            else torch.zeros(x.shape[0], dtype=torch.long)
 
-        x_1 = torch.relu(self.conv1(x, data.edge_index, data.edge_attr))
-        x_1 = self.bn1(x_1)
-        x_2 = torch.relu(self.conv2(x_1, data.edge_index, data.edge_attr))
-        x_2 = self.bn2(x_2)
-        x_3 = torch.relu(self.conv3(x_2, data.edge_index, data.edge_attr))
-        x_3 = self.bn3(x_3)
-        x_4 = torch.relu(self.conv3(x_3, data.edge_index, data.edge_attr))
-        x_4 = self.bn4(x_4)
+        x_1 = torch.relu(self.conv1(x, edge_index, edge_attr, edge_weight))
+        # x_1 = self.bn1(x_1)
+        x_2 = torch.relu(self.conv2(x_1, edge_index, edge_attr, edge_weight))
+        # x_2 = self.bn2(x_2)
 
-        x = torch.cat([x_1, x_2, x_3, x_4], dim=-1)
-        x = global_mean_pool(x, data.batch)
+        x = torch.cat([x_1, x_2], dim=-1)
+        x = global_mean_pool(x, batch)
 
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
-        x = torch.relu(self.fc3(x))
 
-        # only sample during training
-        if self.training:
-            x = global_mean_pool(x, data.inter_graph_idx)
-        x = self.fc4(x)
+        x = global_mean_pool(x, data.inter_graph_idx)
+        x = self.fc3(x)
         return x.view(-1)

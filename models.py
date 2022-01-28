@@ -70,8 +70,8 @@ class GINConv(MessagePassing):
         self.mlp = Sequential(Linear(dim1, dim1, bias=use_bias), ReLU(), Linear(dim1, dim2, bias=use_bias))
         self.eps = torch.nn.Parameter(torch.Tensor([0]))
 
-    def forward(self, x, edge_index, edge_attr, edge_weight=None):
-        if edge_weight is not None and edge_weight.ndim == 1:
+    def forward(self, x, edge_index, edge_attr, edge_weight):
+        if edge_weight.ndim < 2:
             edge_weight = edge_weight[:, None]
 
         edge_embedding = self.bond_encoder(edge_attr)
@@ -82,24 +82,23 @@ class GINConv(MessagePassing):
 
     def message(self, x_j, edge_attr, edge_weight):
         # x_j has shape [E, out_channels]
-        res = torch.relu(x_j + edge_attr)
-        return res * edge_weight if edge_weight is not None else res
+        return torch.relu(x_j + edge_attr) * edge_weight
 
     def update(self, aggr_out):
         return aggr_out
 
 
 class NetGINE(torch.nn.Module):
-    def __init__(self, dim, use_bias=False):
+    def __init__(self, dim, use_bias=True):
         super(NetGINE, self).__init__()
 
         num_features = 3
 
         self.conv1 = GINConv(num_features, 28, dim, use_bias)
-        # self.bn1 = torch.nn.BatchNorm1d(dim)
+        self.bn1 = torch.nn.BatchNorm1d(dim)
 
         self.conv2 = GINConv(num_features, dim, dim, use_bias)
-        # self.bn2 = torch.nn.BatchNorm1d(dim)
+        self.bn2 = torch.nn.BatchNorm1d(dim)
 
         self.fc1 = Linear(2 * dim, dim)
         self.fc2 = Linear(dim, dim)
@@ -112,9 +111,9 @@ class NetGINE(torch.nn.Module):
             else torch.zeros(x.shape[0], dtype=torch.long)
 
         x_1 = torch.relu(self.conv1(x, edge_index, edge_attr, edge_weight))
-        # x_1 = self.bn1(x_1)
+        x_1 = self.bn1(x_1)
         x_2 = torch.relu(self.conv2(x_1, edge_index, edge_attr, edge_weight))
-        # x_2 = self.bn2(x_2)
+        x_2 = self.bn2(x_2)
 
         x = torch.cat([x_1, x_2], dim=-1)
         x = global_mean_pool(x, batch)

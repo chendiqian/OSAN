@@ -2,6 +2,7 @@ import argparse
 from argparse import Namespace
 import os
 import pickle
+from datetime import datetime
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -23,6 +24,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
     parser.add_argument('--data_path', type=str, default='./datasets')
     parser.add_argument('--log_path', type=str, default='./logs')
+    parser.add_argument('--save_freq', type=int, default=100)
 
     return parser.parse_args()
 
@@ -40,7 +42,9 @@ if __name__ == '__main__':
 
     if not os.path.isdir(args.log_path):
         os.mkdir(args.log_path)
-    writer = SummaryWriter(args.log_path)
+    log_path = os.path.join(args.log_path, str(datetime.now()))
+    os.mkdir(log_path)
+    writer = SummaryWriter(log_path)
 
     # TODO: use full indices
     with open(os.path.join(args.data_path, 'indices', 'train_indices.pkl'), 'rb') as handle:
@@ -83,7 +87,6 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(list(emb_model.parameters()) + list(model.parameters()), lr=0.001)
     criterion = torch.nn.L1Loss()
 
-    torch.save(emb_model.state_dict(), './model1.pt')
     for epoch in range(args.epochs):
         train_loss = train(args.sample_k, train_loader, emb_model, model, optimizer, criterion, device)
         val_loss = validation(args.sample_k, val_loader, emb_model, model, criterion, device)
@@ -93,4 +96,6 @@ if __name__ == '__main__':
               f'val loss: {val_loss}')
         writer.add_scalar('loss/training loss', train_loss, epoch)
         writer.add_scalar('loss/val loss', val_loss, epoch)
-    torch.save(emb_model.state_dict(), './model2.pt')
+
+        if epoch % args.save_freq == 0:
+            torch.save(emb_model.state_dict(), f'{log_path}/model{epoch}.pt')

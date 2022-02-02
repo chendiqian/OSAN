@@ -7,7 +7,7 @@ from torch.utils.data.dataloader import default_collate
 from torch_geometric.loader.dataloader import Collater
 from torch_geometric.data import Batch, Data, Dataset, HeteroData
 
-from sample_subgraph import rand_sampling
+from subgraph_utils import rand_sampling
 
 
 class SampleCollater:
@@ -48,7 +48,8 @@ class SampleCollater:
 
         # TODO: duplicate labels or aggregate the embeddings for original labels? potential problem: cannot split the
         #  batch because y shape inconsistent:
-        #  https://pytorch-geometric.readthedocs.io/en/latest/modules/data.html#torch_geometric.data.Batch.to_data_list
+        #  https://pytorch-geometric.readthedocs.io/en/latest/modules/data.html#torch_geometric.data.Batch.to_data_list.
+        #  need to check `batch._slice_dict` and `batch._inc_dict`
         res_data.y = res_data.y[ptr]
 
         return res_data

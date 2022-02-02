@@ -18,7 +18,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--model', type=str, default='gine')
     parser.add_argument('--dataset', type=str, default='zinc')
     parser.add_argument('--hid_size', type=int, default=256)
-    parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=5)
     parser.add_argument('--sample_k', type=int, default=15, help='top-k nodes, i.e. n_nodes of each subgraph')
     parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')

@@ -5,6 +5,8 @@ from torch import Tensor
 from torch_geometric.data import Batch, Data, Dataset, HeteroData
 from torch_geometric.utils import subgraph
 
+from grad_utils import Nodemask2Edgemask, nodemask2edgemask
+
 
 def rand_sampling(graph: Data,
                   n_subgraphs: int,
@@ -62,7 +64,7 @@ def subgraphs_from_mask(graph: Data, masks: Tensor) -> List[Data]:
     Return subgraphs containing gradients of mask
 
     :param graph:
-    :param masks:
+    :param masks: shape(n_Subgraphs, n_nodes)
     :return:
     """
     assert masks.dtype == torch.float
@@ -85,3 +87,19 @@ def subgraphs_from_mask(graph: Data, masks: Tensor) -> List[Data]:
                            y=graph.y))
 
     return graphs
+
+
+def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True) -> Tuple[List[Data], Tensor]:
+    """
+    Create edge_weights which contain the back-propagated gradients
+
+    :param graph:
+    :param masks: shape (n_subgraphs, n_node_in_original_graph,) node masks
+    :param grad: whether to contain gradient info
+    :return:
+    """
+    transform_func = Nodemask2Edgemask.apply if grad else nodemask2edgemask
+    edge_weights = transform_func(masks, graph.edge_index, torch.tensor(graph.num_nodes, device=graph.x.device))
+    edge_weights = edge_weights.reshape(-1)
+    graphs = [graph] * masks.shape[0]
+    return graphs, edge_weights

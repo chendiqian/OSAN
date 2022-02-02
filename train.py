@@ -8,7 +8,7 @@ from torch_geometric.data import Batch
 
 from models import NetGINE, NetGCN
 from custom_dataloder import MYDataLoader
-from sample_subgraph import subgraphs_from_index, subgraphs_from_mask
+from subgraph_utils import subgraphs_from_index, subgraphs_from_mask, edgemasked_graphs_from_nodemask
 
 from imle.wrapper import imle
 from imle.target import TargetDistribution
@@ -35,7 +35,7 @@ def make_get_batch_topk(ptr, sample_k, return_list):
 
         sample_node_idx = []
         for l in logits:
-            thresh = torch.topk(l, k=min(sample_k, l.shape[0]), dim=0, sorted=True).values[-1, :]   # kth largest
+            thresh = torch.topk(l, k=min(sample_k, l.shape[0]), dim=0, sorted=True).values[-1, :]  # kth largest
             # shape (n_nodes, dim)
             mask = (l >= thresh[None]).to(torch.float)
             mask.requires_grad = False
@@ -93,10 +93,12 @@ def train(sample_k: int,
             return torch_get_batch_topk(logits)
 
         sample_node_idx = imle_get_batch_topk(logits)
-        # each mask has shape (n_nodes, hid_dims)
+        # each mask has shape (n_nodes, n_subgraphs)
         sample_node_idx = torch.split(sample_node_idx, split_idx)
+        # original graphs
         graphs = Batch.to_data_list(data)
-        list_subgraphs = [subgraphs_from_mask(g, i.T) for g, i in zip(graphs, sample_node_idx)]
+        list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
+                                             zip(graphs, sample_node_idx)])
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
         # new batch
@@ -109,6 +111,8 @@ def train(sample_k: int,
         batch.inter_graph_idx = original_graph_mask
         batch.ptr = ptr
         batch.y = batch.y[ptr[:-1]]
+        batch.edge_weight = torch.cat(edge_weights, dim=0)
+        batch.edge_index = batch.edge_index[torch.LongTensor([1, 0]), :]
 
         pred = model(batch)
         loss = criterion(pred, batch.y)
@@ -138,9 +142,9 @@ def validation(sample_k: int,
         split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
         torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
         sample_node_idx = torch_get_batch_topk(logits)
-        # each mask has shape (n_nodes, hid_dims)
         graphs = Batch.to_data_list(data)
-        list_subgraphs = [subgraphs_from_mask(g, i.T) for g, i in zip(graphs, sample_node_idx)]
+        list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
+                                             zip(graphs, sample_node_idx)])
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
         # new batch
@@ -153,6 +157,8 @@ def validation(sample_k: int,
         batch.inter_graph_idx = original_graph_mask
         batch.ptr = ptr
         batch.y = batch.y[ptr[:-1]]
+        batch.edge_weight = torch.cat(edge_weights, dim=0)
+        batch.edge_index = batch.edge_index[torch.LongTensor([1, 0]), :]
 
         pred = model(batch)
         loss = criterion(pred, batch.y)

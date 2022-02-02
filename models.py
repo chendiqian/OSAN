@@ -61,9 +61,9 @@ class NetGCN(torch.nn.Module):
         return self.lin(x)
 
 
-class GINConv(MessagePassing):
+class GINEConv(MessagePassing):
     def __init__(self, emb_dim, dim1, dim2, use_bias=False):
-        super(GINConv, self).__init__(aggr="add")
+        super(GINEConv, self).__init__(aggr="add")
 
         # disable the bias, otherwise the information will be nonzero
         self.bond_encoder = Sequential(Linear(emb_dim, dim1, bias=use_bias), ReLU(), Linear(dim1, dim1, bias=use_bias))
@@ -94,10 +94,10 @@ class NetGINE(torch.nn.Module):
 
         num_features = 3
 
-        self.conv1 = GINConv(num_features, 28, dim, use_bias)
+        self.conv1 = GINEConv(num_features, 28, dim, use_bias)
         self.bn1 = torch.nn.BatchNorm1d(dim)
 
-        self.conv2 = GINConv(num_features, dim, dim, use_bias)
+        self.conv2 = GINEConv(num_features, dim, dim, use_bias)
         self.bn2 = torch.nn.BatchNorm1d(dim)
 
         self.fc1 = Linear(2 * dim, dim)
@@ -105,8 +105,7 @@ class NetGINE(torch.nn.Module):
         self.fc3 = Linear(dim, 1)
 
     def forward(self, data):
-        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
-        edge_weight = data.edge_weight if hasattr(data, 'edge_weight') and data.edge_weight is not None else None
+        x, edge_index, edge_attr, edge_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight
         batch = data.batch if hasattr(data, 'batch') and data.batch is not None \
             else torch.zeros(x.shape[0], dtype=torch.long)
 

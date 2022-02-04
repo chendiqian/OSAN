@@ -18,6 +18,8 @@ def get_parse() -> Namespace:
     parser.add_argument('--model', type=str, default='gine')
     parser.add_argument('--dataset', type=str, default='zinc')
     parser.add_argument('--hid_size', type=int, default=256)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--reg', type=float, default=0.)
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--sample_k', type=int, default=15, help='top-k nodes, i.e. n_nodes of each subgraph')
@@ -84,7 +86,8 @@ if __name__ == '__main__':
 
     emb_model = NetGCN(28, args.hid_size, args.num_subgraphs).to(device)
 
-    optimizer = torch.optim.Adam(list(emb_model.parameters()) + list(model.parameters()), lr=0.001)
+    optimizer = torch.optim.Adam(list(emb_model.parameters()) + list(model.parameters()),
+                                 lr=args.lr, weight_decay=args.reg)
     criterion = torch.nn.L1Loss()
 
     for epoch in range(args.epochs):

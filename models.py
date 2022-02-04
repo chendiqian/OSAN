@@ -118,7 +118,9 @@ class NetGINE(torch.nn.Module):
         x = global_mean_pool(x, batch)
 
         x = torch.relu(self.fc1(x))
+        x = torch.dropout(x, p=0.5, train=self.training)
         x = torch.relu(self.fc2(x))
+        x = torch.dropout(x, p=0.5, train=self.training)
 
         x = global_mean_pool(x, data.inter_graph_idx)
         x = self.fc3(x)

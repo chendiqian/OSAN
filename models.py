@@ -89,19 +89,24 @@ class GINEConv(MessagePassing):
 
 
 class NetGINE(torch.nn.Module):
-    def __init__(self, dim, use_bias=True):
+    def __init__(self, dim, dropout, num_convlayers, use_bias=True):
         super(NetGINE, self).__init__()
 
+        self.dropout = dropout
         num_features = 3
+        assert num_convlayers > 1
 
-        self.conv1 = GINEConv(num_features, 28, dim, use_bias)
+        self.conv = torch.nn.ModuleList([GINEConv(num_features, 28, dim, use_bias)])
+        self.bn = torch.nn.ModuleList([torch.nn.BatchNorm1d(dim)])
+
+        for _ in range(num_convlayers - 1):
+            self.conv.append(GINEConv(num_features, dim, dim, use_bias))
+            self.bn.append(torch.nn.BatchNorm1d(dim))
+
+        self.fc1 = Linear(num_convlayers * dim, dim)
         self.bn1 = torch.nn.BatchNorm1d(dim)
-
-        self.conv2 = GINEConv(num_features, dim, dim, use_bias)
-        self.bn2 = torch.nn.BatchNorm1d(dim)
-
-        self.fc1 = Linear(2 * dim, dim)
         self.fc2 = Linear(dim, dim)
+        self.bn2 = torch.nn.BatchNorm1d(dim)
         self.fc3 = Linear(dim, 1)
 
     def forward(self, data):
@@ -109,18 +114,21 @@ class NetGINE(torch.nn.Module):
         batch = data.batch if hasattr(data, 'batch') and data.batch is not None \
             else torch.zeros(x.shape[0], dtype=torch.long)
 
-        x_1 = torch.relu(self.conv1(x, edge_index, edge_attr, edge_weight))
-        x_1 = self.bn1(x_1)
-        x_2 = torch.relu(self.conv2(x_1, edge_index, edge_attr, edge_weight))
-        x_2 = self.bn2(x_2)
+        intermediate_x = []
+        for i, (conv, bn) in enumerate(zip(self.conv, self.bn)):
+            x = conv(x, edge_index, edge_attr, edge_weight)
+            x = bn(x)
+            x = torch.relu(x)
+            x = torch.dropout(x, p=self.dropout, train=self.training)
+            intermediate_x.append(x)
 
-        x = torch.cat([x_1, x_2], dim=-1)
+        x = torch.cat(intermediate_x, dim=-1)
         x = global_mean_pool(x, batch)
 
-        x = torch.relu(self.fc1(x))
-        x = torch.dropout(x, p=0.5, train=self.training)
-        x = torch.relu(self.fc2(x))
-        x = torch.dropout(x, p=0.5, train=self.training)
+        x = torch.relu(self.bn1(self.fc1(x)))
+        x = torch.dropout(x, p=self.dropout, train=self.training)
+        x = torch.relu(self.bn2(self.fc2(x)))
+        x = torch.dropout(x, p=self.dropout, train=self.training)
 
         x = global_mean_pool(x, data.inter_graph_idx)
         x = self.fc3(x)

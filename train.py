@@ -50,6 +50,7 @@ def make_get_batch_topk(ptr, sample_k, return_list):
 
 
 def train(sample_k: int,
+          num_subgraphs: int,
           dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
           emb_model: Emb_model,
           model: Train_model,
@@ -60,6 +61,7 @@ def train(sample_k: int,
     A train step
 
     :param sample_k:
+    :param num_subgraphs:
     :param dataloader:
     :param emb_model:
     :param model:
@@ -68,7 +70,8 @@ def train(sample_k: int,
     :param device:
     :return:
     """
-    emb_model.train()
+    if emb_model is not None:
+        emb_model.eval()
     model.train()
     train_losses = torch.tensor(0., device=device)
 
@@ -77,24 +80,33 @@ def train(sample_k: int,
 
     for data in dataloader:
         data = data.to(device)
+
         optimizer.zero_grad()
 
-        logits = emb_model(data)
-
         split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
-        torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=False)
 
-        @imle(target_distribution=target_distribution,
-              noise_distribution=noise_distribution,
-              input_noise_temperature=1.0,
-              target_noise_temperature=1.0,
-              nb_samples=1)
-        def imle_get_batch_topk(logits: torch.Tensor):
-            return torch_get_batch_topk(logits)
+        if emb_model is not None:
+            logits = emb_model(data)
 
-        sample_node_idx = imle_get_batch_topk(logits)
-        # each mask has shape (n_nodes, n_subgraphs)
-        sample_node_idx = torch.split(sample_node_idx, split_idx)
+            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=False)
+
+            @imle(target_distribution=target_distribution,
+                  noise_distribution=noise_distribution,
+                  input_noise_temperature=1.0,
+                  target_noise_temperature=1.0,
+                  nb_samples=1)
+            def imle_get_batch_topk(logits: torch.Tensor):
+                return torch_get_batch_topk(logits)
+
+            sample_node_idx = imle_get_batch_topk(logits)
+            # each mask has shape (n_nodes, n_subgraphs)
+            sample_node_idx = torch.split(sample_node_idx, split_idx)
+        else:
+            # randomly sample if not training embedding model
+            logits = torch.rand(data.ptr[-1], num_subgraphs, device=device)
+            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
+            sample_node_idx = torch_get_batch_topk(logits)
+
         # original graphs
         graphs = Batch.to_data_list(data)
         list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
@@ -126,20 +138,27 @@ def train(sample_k: int,
 
 @torch.no_grad()
 def validation(sample_k: int,
+               num_subgraphs: int,
                dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
                emb_model: Emb_model,
                model: Train_model,
                criterion: Loss,
                device: Union[str, torch.device]) -> Union[torch.Tensor, torch.FloatType, float]:
-    emb_model.eval()
+    if emb_model is not None:
+        emb_model.eval()
     model.eval()
     val_losses = torch.tensor(0., device=device)
 
     for data in dataloader:
         data = data.to(device)
-        logits = emb_model(data)
 
         split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
+
+        if emb_model is not None:
+            logits = emb_model(data)
+        else:
+            logits = torch.rand(data.ptr[-1], num_subgraphs, device=device)
+
         torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
         sample_node_idx = torch_get_batch_topk(logits)
         graphs = Batch.to_data_list(data)

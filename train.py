@@ -71,7 +71,7 @@ def train(sample_k: int,
     :return:
     """
     if emb_model is not None:
-        emb_model.eval()
+        emb_model.train()
     model.train()
     train_losses = torch.tensor(0., device=device)
 
@@ -101,15 +101,17 @@ def train(sample_k: int,
             sample_node_idx = imle_get_batch_topk(logits)
             # each mask has shape (n_nodes, n_subgraphs)
             sample_node_idx = torch.split(sample_node_idx, split_idx)
+            edge_weights_grad = True
         else:
             # randomly sample if not training embedding model
             logits = torch.rand(data.ptr[-1], num_subgraphs, device=device)
             torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
             sample_node_idx = torch_get_batch_topk(logits)
+            edge_weights_grad = False
 
         # original graphs
         graphs = Batch.to_data_list(data)
-        list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
+        list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=edge_weights_grad) for g, i in
                                              zip(graphs, sample_node_idx)])
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 

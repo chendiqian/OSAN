@@ -96,12 +96,12 @@ if __name__ == '__main__':
     infile = open("./datasets/indices/val.index.txt", "r")
     for line in infile:
         val_indices = line.split(",")
-        val_indices = [int(i) for i in val_indices[:32]]
+        val_indices = [int(i) for i in val_indices]
 
     infile = open("./datasets/indices/train.index.txt", "r")
     for line in infile:
         train_indices = line.split(",")
-        train_indices = [int(i) for i in train_indices[:32]]
+        train_indices = [int(i) for i in train_indices]
 
     train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=False,
                                 n_subgraphs=0)
@@ -143,13 +143,6 @@ if __name__ == '__main__':
                               model,
                               criterion,
                               device)
-
-        logger.info(f'epoch: {epoch}, '
-                    f'training loss: {train_loss}, '
-                    f'val loss: {val_loss}, '
-                    f'patience: {patience}')
-        writer.add_scalar('loss/training loss', train_loss, epoch)
-        writer.add_scalar('loss/val loss', val_loss, epoch)
         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -158,6 +151,13 @@ if __name__ == '__main__':
             patience += 1
             if patience > args.patience:
                 logger.info('early stopping')
+                
+        logger.info(f'epoch: {epoch}, '
+                    f'training loss: {train_loss}, '
+                    f'val loss: {val_loss}, '
+                    f'patience: {patience}')
+        writer.add_scalar('loss/training loss', train_loss, epoch)
+        writer.add_scalar('loss/val loss', val_loss, epoch)
 
         if epoch % args.save_freq == 0:
             torch.save(model.state_dict(), f'{folder_name}/model{epoch}.pt')

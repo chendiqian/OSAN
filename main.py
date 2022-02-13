@@ -1,6 +1,8 @@
 import argparse
-from argparse import Namespace
+import logging
+from logging import Logger
 import os
+from argparse import Namespace
 from datetime import datetime
 
 import torch
@@ -18,6 +20,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--dataset', type=str, default='zinc')
     parser.add_argument('--hid_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--patience', type=int, default=50, help='for early stop')
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
     parser.add_argument('--num_convlayers', type=int, default=3)
@@ -28,15 +31,26 @@ def get_parse() -> Namespace:
     parser.add_argument('--data_path', type=str, default='./datasets')
     parser.add_argument('--log_path', type=str, default='./logs')
     parser.add_argument('--save_freq', type=int, default=100)
-    parser.add_argument('--train_embd_model', type=bool, default=False)
+    parser.add_argument('--train_embd_model', action='store_true', help='train the embedding model to get '
+                                                                        'differentiable logits, otherwise randomly '
+                                                                        'select') 
 
     return parser.parse_args()
 
 
+def get_logger(folder_path: str) -> Logger:
+    logger = logging.getLogger('myapp')
+    hdlr = logging.FileHandler(os.path.join(folder_path, 'mylog.log'))
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    hdlr.setFormatter(formatter)
+    logger.addHandler(hdlr)
+    logger.setLevel(logging.INFO)
+    return logger
+
+
 if __name__ == '__main__':
     args = get_parse()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+    
     if args.dataset.lower() == 'zinc':
         if not os.path.isdir(args.data_path):
             os.mkdir(args.data_path)
@@ -59,6 +73,10 @@ if __name__ == '__main__':
     folder_name = os.path.join(args.log_path, hparams, str(datetime.now()))
     os.mkdir(folder_name)
     writer = SummaryWriter(folder_name)
+    logger = get_logger(folder_name)
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    logger.info(f'Using device: {device}')
 
     # TODO: use full indices
     # with open(os.path.join(args.data_path, 'indices', 'train_indices.pkl'), 'rb') as handle:
@@ -70,10 +88,10 @@ if __name__ == '__main__':
     # with open(os.path.join(args.data_path, 'indices', 'val_indices.pkl'), 'rb') as handle:
     #     val_indices = pickle.load(handle)[:32]
 
-    infile = open("./datasets/indices/test.index.txt", "r")
-    for line in infile:
-        test_indices = line.split(",")
-        test_indices = [int(i) for i in test_indices[:32]]
+    # infile = open("./datasets/indices/test.index.txt", "r")
+    # for line in infile:
+    #     test_indices = line.split(",")
+    #     test_indices = [int(i) for i in test_indices]
 
     infile = open("./datasets/indices/val.index.txt", "r")
     for line in infile:
@@ -87,8 +105,8 @@ if __name__ == '__main__':
 
     train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=False,
                                 n_subgraphs=0)
-    test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=False,
-                               n_subgraphs=0)
+    # test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=False,
+    #                            n_subgraphs=0)
     val_loader = MYDataLoader(dataset[225011:][val_indices], batch_size=args.batch_size, shuffle=False, n_subgraphs=0)
 
     if args.model.lower() == 'gine':
@@ -105,7 +123,9 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     criterion = torch.nn.L1Loss()
-
+    
+    best_val_loss = 1e5
+    patience = 0
     for epoch in range(args.epochs):
         train_loss = train(args.sample_k,
                            args.num_subgraphs,
@@ -124,11 +144,20 @@ if __name__ == '__main__':
                               criterion,
                               device)
 
-        print(f'epoch: {epoch}, '
-              f'training loss: {train_loss}, '
-              f'val loss: {val_loss}')
+        logger.info(f'epoch: {epoch}, '
+                    f'training loss: {train_loss}, '
+                    f'val loss: {val_loss}, '
+                    f'patience: {patience}')
         writer.add_scalar('loss/training loss', train_loss, epoch)
         writer.add_scalar('loss/val loss', val_loss, epoch)
+        
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience = 0
+        else:
+            patience += 1
+            if patience > args.patience:
+                logger.info('early stopping')
 
         if epoch % args.save_freq == 0:
             torch.save(model.state_dict(), f'{folder_name}/model{epoch}.pt')

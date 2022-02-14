@@ -135,7 +135,7 @@ def train(sample_k: int,
         train_losses += loss * batch.num_graphs
         optimizer.step()
 
-    return train_losses.item() / len(dataloader.dataset)
+    return train_losses.item() / len(dataloader.dataset) / num_subgraphs
 
 
 @torch.no_grad()
@@ -186,4 +186,4 @@ def validation(sample_k: int,
 
         val_losses += loss * batch.num_graphs
 
-    return val_losses.item() / len(dataloader.dataset)
+    return val_losses.item() / len(dataloader.dataset) / num_subgraphs

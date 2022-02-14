@@ -104,9 +104,7 @@ class NetGINE(torch.nn.Module):
             self.bn.append(torch.nn.BatchNorm1d(dim))
 
         self.fc1 = Linear(num_convlayers * dim, dim)
-        self.bn1 = torch.nn.BatchNorm1d(dim)
         self.fc2 = Linear(dim, dim)
-        self.bn2 = torch.nn.BatchNorm1d(dim)
         self.fc3 = Linear(dim, 1)
 
     def forward(self, data):
@@ -114,6 +112,7 @@ class NetGINE(torch.nn.Module):
         batch = data.batch if hasattr(data, 'batch') and data.batch is not None \
             else torch.zeros(x.shape[0], dtype=torch.long)
 
+        # TODO: try residual
         intermediate_x = []
         for i, (conv, bn) in enumerate(zip(self.conv, self.bn)):
             x = conv(x, edge_index, edge_attr, edge_weight)
@@ -125,11 +124,8 @@ class NetGINE(torch.nn.Module):
         x = torch.cat(intermediate_x, dim=-1)
         x = global_mean_pool(x, batch)
 
-        x = torch.relu(self.bn1(self.fc1(x)))
-        x = torch.dropout(x, p=self.dropout, train=self.training)
-        x = torch.relu(self.bn2(self.fc2(x)))
-        x = torch.dropout(x, p=self.dropout, train=self.training)
-
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
         x = global_mean_pool(x, data.inter_graph_idx)
         x = self.fc3(x)
         return x.view(-1)

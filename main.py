@@ -20,7 +20,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--dataset', type=str, default='zinc')
     parser.add_argument('--hid_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--patience', type=int, default=50, help='for early stop')
+    parser.add_argument('--patience', type=int, default=100, help='for early stop')
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
     parser.add_argument('--num_convlayers', type=int, default=3)
@@ -103,7 +103,7 @@ if __name__ == '__main__':
         train_indices = line.split(",")
         train_indices = [int(i) for i in train_indices]
 
-    train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=False,
+    train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=True,
                                 n_subgraphs=0)
     # test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=False,
     #                            n_subgraphs=0)
@@ -122,6 +122,9 @@ if __name__ == '__main__':
         train_params = model.parameters()
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                           factor=0.5, patience=5,
+                                                           min_lr=1e-5)
     criterion = torch.nn.L1Loss()
     
     best_val_loss = 1e5
@@ -144,6 +147,8 @@ if __name__ == '__main__':
                               criterion,
                               device)
         
+        scheduler.step(val_loss)
+        
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience = 0
@@ -151,6 +156,7 @@ if __name__ == '__main__':
             patience += 1
             if patience > args.patience:
                 logger.info('early stopping')
+                break
                 
         logger.info(f'epoch: {epoch}, '
                     f'training loss: {train_loss}, '

@@ -2,6 +2,8 @@ import torch
 from torch.nn import Sequential, Linear, ReLU
 from torch_geometric.nn import global_mean_pool, MessagePassing
 
+from .nn_utils import residual
+
 
 class GINEConv(MessagePassing):
     def __init__(self, emb_dim, dim1, dim2, use_bias=False):

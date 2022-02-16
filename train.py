@@ -74,6 +74,7 @@ def train(sample_k: int,
         emb_model.train()
     model.train()
     train_losses = torch.tensor(0., device=device)
+    num_graphs = 0
 
     target_distribution = TargetDistribution(alpha=1.0, beta=10.0)
     noise_distribution = SumOfGammaNoiseDistribution(k=10, nb_iterations=100, device=device)
@@ -133,9 +134,10 @@ def train(sample_k: int,
 
         loss.backward()
         train_losses += loss * batch.num_graphs
+        num_graphs += batch.num_graphs
         optimizer.step()
 
-    return train_losses.item() / len(dataloader.dataset) / num_subgraphs
+    return train_losses.item() / num_graphs
 
 
 @torch.no_grad()
@@ -150,6 +152,7 @@ def validation(sample_k: int,
         emb_model.eval()
     model.eval()
     val_losses = torch.tensor(0., device=device)
+    num_graphs = 0
 
     for data in dataloader:
         data = data.to(device)
@@ -185,5 +188,6 @@ def validation(sample_k: int,
         loss = criterion(pred, batch.y)
 
         val_losses += loss * batch.num_graphs
+        num_graphs += batch.num_graphs
 
-    return val_losses.item() / len(dataloader.dataset) / num_subgraphs
+    return val_losses.item() / num_graphs

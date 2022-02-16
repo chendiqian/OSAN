@@ -1,2 +1,2 @@
 from .GINE_gnn import NetGINE
-from .GCN_gnn import NetGCN
+from .GCN_embd import NetGCN

@@ -18,6 +18,7 @@ SubgraphSetBatch = namedtuple(
         'batch',
         'inter_graph_idx',
         'ptr',
+        'num_graphs',
     ])
 
 
@@ -133,4 +134,5 @@ def construct_subgraph_batch(graph_list: List[Data], sample_node_idx, edge_weigh
                             y=batch.y[ptr[:-1]],
                             batch=batch.batch,
                             inter_graph_idx=original_graph_mask,
-                            ptr=ptr)
+                            ptr=ptr,
+                            num_graphs=batch.num_graphs)

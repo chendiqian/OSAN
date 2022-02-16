@@ -8,7 +8,7 @@ from torch_geometric.data import Batch
 
 from models import NetGINE, NetGCN
 from custom_dataloder import MYDataLoader
-from subgraph_utils import subgraphs_from_index, subgraphs_from_mask, edgemasked_graphs_from_nodemask
+from subgraph_utils import edgemasked_graphs_from_nodemask, construct_subgraph_batch
 
 from imle.wrapper import imle
 from imle.target import TargetDistribution
@@ -35,7 +35,8 @@ def make_get_batch_topk(ptr, sample_k, return_list):
 
         sample_node_idx = []
         for l in logits:
-            thresh = torch.topk(l, k=min(sample_k, l.shape[0]), dim=0, sorted=True).values[-1, :]  # kth largest
+            k = sample_k + l.shape[0] if sample_k < 0 else sample_k  # e.g. -1 -> remove 1 node
+            thresh = torch.topk(l, k=min(k, l.shape[0]), dim=0, sorted=True).values[-1, :]  # kth largest
             # shape (n_nodes, dim)
             mask = (l >= thresh[None]).to(torch.float)
             mask.requires_grad = False
@@ -114,20 +115,11 @@ def train(sample_k: int,
         graphs = Batch.to_data_list(data)
         list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=edge_weights_grad) for g, i in
                                              zip(graphs, sample_node_idx)])
+
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
         # new batch
-        batch = Batch.from_data_list(list_subgraphs, None, None)
-        original_graph_mask = torch.cat([torch.full((idx.shape[1],), i, device=device)
-                                         for i, idx in enumerate(sample_node_idx)], dim=0)
-        ptr = torch.cat((torch.tensor([0], device=device),
-                         (original_graph_mask[1:] > original_graph_mask[:-1]).nonzero().reshape(-1) + 1,
-                         torch.tensor([len(original_graph_mask)], device=device)), dim=0)
-        batch.inter_graph_idx = original_graph_mask
-        batch.ptr = ptr
-        batch.y = batch.y[ptr[:-1]]
-        batch.edge_weight = torch.cat(edge_weights, dim=0)
-        batch.edge_index = batch.edge_index[torch.LongTensor([1, 0]), :]
+        batch = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
 
         pred = model(batch)
         loss = criterion(pred, batch.y)
@@ -172,17 +164,7 @@ def validation(sample_k: int,
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
         # new batch
-        batch = Batch.from_data_list(list_subgraphs, None, None)
-        original_graph_mask = torch.cat([torch.full((idx.shape[1],), i, device=device)
-                                         for i, idx in enumerate(sample_node_idx)], dim=0)
-        ptr = torch.cat((torch.tensor([0], device=device),
-                         (original_graph_mask[1:] > original_graph_mask[:-1]).nonzero().reshape(-1) + 1,
-                         torch.tensor([len(original_graph_mask)], device=device)), dim=0)
-        batch.inter_graph_idx = original_graph_mask
-        batch.ptr = ptr
-        batch.y = batch.y[ptr[:-1]]
-        batch.edge_weight = torch.cat(edge_weights, dim=0)
-        batch.edge_index = batch.edge_index[torch.LongTensor([1, 0]), :]
+        batch = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
 
         pred = model(batch)
         loss = criterion(pred, batch.y)

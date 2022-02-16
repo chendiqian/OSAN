@@ -78,16 +78,6 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f'Using device: {device}')
 
-    # TODO: use full indices
-    # with open(os.path.join(args.data_path, 'indices', 'train_indices.pkl'), 'rb') as handle:
-    #     train_indices = pickle.load(handle)[:32]
-    #
-    # with open(os.path.join(args.data_path, 'indices', 'test_indices.pkl'), 'rb') as handle:
-    #     test_indices = pickle.load(handle)[:32]
-    #
-    # with open(os.path.join(args.data_path, 'indices', 'val_indices.pkl'), 'rb') as handle:
-    #     val_indices = pickle.load(handle)[:32]
-
     # infile = open("./datasets/indices/test.index.txt", "r")
     # for line in infile:
     #     test_indices = line.split(",")
@@ -123,7 +113,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                           factor=0.5, patience=5,
+                                                           factor=0.5, patience=20,
                                                            min_lr=1e-5)
     criterion = torch.nn.L1Loss()
     
@@ -157,13 +147,14 @@ if __name__ == '__main__':
             if patience > args.patience:
                 logger.info('early stopping')
                 break
-                
+
         logger.info(f'epoch: {epoch}, '
                     f'training loss: {train_loss}, '
                     f'val loss: {val_loss}, '
                     f'patience: {patience}')
         writer.add_scalar('loss/training loss', train_loss, epoch)
         writer.add_scalar('loss/val loss', val_loss, epoch)
+        writer.add_scalar('lr', scheduler.optimizer.param_groups[0]['lr'], epoch)
 
         if epoch % args.save_freq == 0:
             torch.save(model.state_dict(), f'{folder_name}/model{epoch}.pt')

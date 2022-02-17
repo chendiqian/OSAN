@@ -23,6 +23,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
     parser.add_argument('--num_convlayers', type=int, default=3)
+    parser.add_argument('--gnn_jk', type=str, default='concat', choices=[None, 'concat', 'residual'])
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--sample_k', type=int, default=30, help='top-k nodes, i.e. n_nodes of each subgraph')
@@ -90,7 +91,7 @@ if __name__ == '__main__':
     logger.info(f'Using device: {device}')
 
     if args.model.lower() == 'gine':
-        model = NetGINE(args.hid_size, args.dropout, args.num_convlayers).to(device)
+        model = NetGINE(args.hid_size, args.dropout, args.num_convlayers, jk=args.gnn_jk).to(device)
     else:
         raise NotImplementedError
 

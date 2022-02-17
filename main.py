@@ -130,6 +130,8 @@ if __name__ == '__main__':
                               emb_model,
                               model,
                               criterion,
+                              task_type,
+                              args.voting,
                               device)
 
         scheduler.step(val_loss)

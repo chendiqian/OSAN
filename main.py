@@ -40,6 +40,7 @@ def get_parse() -> Namespace:
                                                                                                  "k")
     parser.add_argument('--esan_frac', type=float, default=0.1, help="Only for baselines, see --sample_mode")
     parser.add_argument('--esan_k', type=int, default=3, help="Only for baselines, see --sample_mode")
+    parser.add_argument('--voting', type=int, default=1, help="Only for baselines, random sampling for majority")
 
     parser.add_argument('--debug', action='store_true', help='when debugging, take a small subset of the datasets')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
@@ -68,7 +69,12 @@ if __name__ == '__main__':
                                                      args.sample_mode,
                                                      args.esan_frac,
                                                      args.esan_k,
-                                                     args.debug, )
+                                                     args.debug)
+
+    if args.dataset.lower() in ['zinc']:
+        task_type = 'regression'
+    else:
+        raise NotImplementedError
 
     hparams = f'hid_{args.hid_size}_' \
               f'dp_{args.dropout}_' \
@@ -112,7 +118,6 @@ if __name__ == '__main__':
     patience = 0
     for epoch in range(args.epochs):
         train_loss = train(args.sample_k,
-                           args.num_subgraphs,
                            train_loader,
                            emb_model,
                            model,
@@ -121,7 +126,6 @@ if __name__ == '__main__':
                            device)
 
         val_loss = validation(args.sample_k,
-                              args.num_subgraphs,
                               val_loader,
                               emb_model,
                               model,

@@ -51,7 +51,6 @@ def make_get_batch_topk(ptr, sample_k, return_list):
 
 
 def train(sample_k: int,
-          num_subgraphs: int,
           dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
           emb_model: Emb_model,
           model: Train_model,
@@ -62,7 +61,6 @@ def train(sample_k: int,
     A train step
 
     :param sample_k:
-    :param num_subgraphs:
     :param dataloader:
     :param emb_model:
     :param model:
@@ -121,38 +119,43 @@ def train(sample_k: int,
 
 @torch.no_grad()
 def validation(sample_k: int,
-               num_subgraphs: int,
                dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
                emb_model: Emb_model,
                model: Train_model,
                criterion: Loss,
+               task_type: str,
+               voting: int,
                device: Union[str, torch.device]) -> Union[torch.Tensor, torch.FloatType, float]:
+
+    assert task_type == 'regression', "Does not support tasks other than regression"
+
     if emb_model is not None:
         emb_model.eval()
     model.eval()
     val_losses = torch.tensor(0., device=device)
     num_graphs = 0
 
-    for data in dataloader:
-        data = data.to(device)
+    for v in range(voting):
+        for data in dataloader:
+            data = data.to(device)
 
-        if emb_model is not None:
-            split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
-            logits = emb_model(data)
-            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
-            sample_node_idx = torch_get_batch_topk(logits)
-            graphs = Batch.to_data_list(data)
-            list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
-                                                 zip(graphs, sample_node_idx)])
-            list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
+            if emb_model is not None:
+                split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
+                logits = emb_model(data)
+                torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
+                sample_node_idx = torch_get_batch_topk(logits)
+                graphs = Batch.to_data_list(data)
+                list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
+                                                     zip(graphs, sample_node_idx)])
+                list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
-            # new batch
-            data = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
+                # new batch
+                data = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
 
-        pred = model(data)
-        loss = criterion(pred, data.y)
+            pred = model(data)
+            loss = criterion(pred, data.y)
 
-        val_losses += loss * data.num_graphs
-        num_graphs += data.num_graphs
+            val_losses += loss * data.num_graphs
+            num_graphs += data.num_graphs
 
     return val_losses.item() / num_graphs

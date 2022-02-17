@@ -15,7 +15,7 @@ class GINEConv(MessagePassing):
         self.eps = torch.nn.Parameter(torch.Tensor([0]))
 
     def forward(self, x, edge_index, edge_attr, edge_weight):
-        if edge_weight.ndim < 2:
+        if edge_weight is not None and edge_weight.ndim < 2:
             edge_weight = edge_weight[:, None]
 
         edge_embedding = self.bond_encoder(edge_attr)
@@ -26,7 +26,8 @@ class GINEConv(MessagePassing):
 
     def message(self, x_j, edge_attr, edge_weight):
         # x_j has shape [E, out_channels]
-        return torch.relu(x_j + edge_attr) * edge_weight
+        m = torch.relu(x_j + edge_attr)
+        return m * edge_weight if edge_weight is not None else m
 
     def update(self, aggr_out):
         return aggr_out

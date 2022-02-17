@@ -1,4 +1,4 @@
-from typing import Union, List
+from typing import Union
 import itertools
 
 import torch
@@ -7,7 +7,7 @@ from torch_geometric.loader import DataLoader as PyGDataLoader
 from torch_geometric.data import Batch
 
 from models import NetGINE, NetGCN
-from custom_dataloder import MYDataLoader
+from data.custom_dataloader import MYDataLoader
 from subgraph_utils import edgemasked_graphs_from_nodemask, construct_subgraph_batch
 
 from imle.wrapper import imle
@@ -82,14 +82,11 @@ def train(sample_k: int,
 
     for data in dataloader:
         data = data.to(device)
-
         optimizer.zero_grad()
 
-        split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
-
         if emb_model is not None:
+            split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
             logits = emb_model(data)
-
             torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=False)
 
             @imle(target_distribution=target_distribution,
@@ -103,30 +100,20 @@ def train(sample_k: int,
             sample_node_idx = imle_get_batch_topk(logits)
             # each mask has shape (n_nodes, n_subgraphs)
             sample_node_idx = torch.split(sample_node_idx, split_idx)
-            edge_weights_grad = True
-        else:
-            # randomly sample if not training embedding model
-            logits = torch.rand(data.ptr[-1], num_subgraphs, device=device)
-            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
-            sample_node_idx = torch_get_batch_topk(logits)
-            edge_weights_grad = False
+            # original graphs
+            graphs = Batch.to_data_list(data)
+            list_subgraphs, edge_weights = zip(
+                *[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
+                  zip(graphs, sample_node_idx)])
+            list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
+            data = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
 
-        # original graphs
-        graphs = Batch.to_data_list(data)
-        list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=edge_weights_grad) for g, i in
-                                             zip(graphs, sample_node_idx)])
-
-        list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
-
-        # new batch
-        batch = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
-
-        pred = model(batch)
-        loss = criterion(pred, batch.y)
+        pred = model(data)
+        loss = criterion(pred, data.y)
 
         loss.backward()
-        train_losses += loss * batch.num_graphs
-        num_graphs += batch.num_graphs
+        train_losses += loss * data.num_graphs
+        num_graphs += data.num_graphs
         optimizer.step()
 
     return train_losses.item() / num_graphs
@@ -149,27 +136,23 @@ def validation(sample_k: int,
     for data in dataloader:
         data = data.to(device)
 
-        split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
-
         if emb_model is not None:
+            split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
             logits = emb_model(data)
-        else:
-            logits = torch.rand(data.ptr[-1], num_subgraphs, device=device)
+            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
+            sample_node_idx = torch_get_batch_topk(logits)
+            graphs = Batch.to_data_list(data)
+            list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
+                                                 zip(graphs, sample_node_idx)])
+            list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
-        torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
-        sample_node_idx = torch_get_batch_topk(logits)
-        graphs = Batch.to_data_list(data)
-        list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
-                                             zip(graphs, sample_node_idx)])
-        list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
+            # new batch
+            data = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
 
-        # new batch
-        batch = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
+        pred = model(data)
+        loss = criterion(pred, data.y)
 
-        pred = model(batch)
-        loss = criterion(pred, batch.y)
-
-        val_losses += loss * batch.num_graphs
-        num_graphs += batch.num_graphs
+        val_losses += loss * data.num_graphs
+        num_graphs += data.num_graphs
 
     return val_losses.item() / num_graphs

@@ -7,19 +7,7 @@ from torch_geometric.data import Batch, Data, Dataset, HeteroData
 from torch_geometric.utils import subgraph
 
 from grad_utils import Nodemask2Edgemask, nodemask2edgemask
-
-SubgraphSetBatch = namedtuple(
-    'SubgraphSetBatch', [
-        'x',
-        'edge_index',
-        'edge_attr',
-        'edge_weight',
-        'y',
-        'batch',
-        'inter_graph_idx',
-        'ptr',
-        'num_graphs',
-    ])
+from data import SubgraphSetBatch
 
 
 def rand_sampling(graph: Data,
@@ -118,7 +106,18 @@ def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True) -> Tu
     return graphs, edge_weights
 
 
-def construct_subgraph_batch(graph_list: List[Data], sample_node_idx, edge_weights, device):
+def construct_subgraph_batch(graph_list: List[Data],
+                             sample_node_idx: List[Tensor],
+                             edge_weights: List[Tensor],
+                             device: torch.device):
+    """
+
+    :param graph_list: a list of [subgraph1_1, subgraph1_2, subgraph1_3, subgraph2_1, ...]
+    :param sample_node_idx: a list of 1 / 0 tensors indicating the nodes selected, shape (N, K)
+    :param edge_weights:
+    :param device:
+    :return:
+    """
     # new batch
     batch = Batch.from_data_list(graph_list, None, None)
     original_graph_mask = torch.cat([torch.full((idx.shape[1],), i, device=device)

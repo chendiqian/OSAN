@@ -7,11 +7,10 @@ from datetime import datetime
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from torch_geometric.datasets import TUDataset
 
-from custom_dataloder import MYDataLoader
 from models import NetGINE, NetGCN
 from train import train, validation
+from data.get_data import get_data
 
 
 def get_parse() -> Namespace:
@@ -24,16 +23,25 @@ def get_parse() -> Namespace:
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
     parser.add_argument('--num_convlayers', type=int, default=3)
-    parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--sample_k', type=int, default=30, help='top-k nodes, i.e. n_nodes of each subgraph')
     parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
     parser.add_argument('--data_path', type=str, default='./datasets')
     parser.add_argument('--log_path', type=str, default='./logs')
     parser.add_argument('--save_freq', type=int, default=100)
-    parser.add_argument('--train_embd_model', action='store_true', help='train the embedding model to get '
-                                                                        'differentiable logits, otherwise randomly '
-                                                                        'select') 
+
+    parser.add_argument('--policy', type=str, default='null', choices=['null', 'node_deleted'])
+    parser.add_argument('--sample_mode', type=str, default='int', choices=['float', 'int'], help="Only for baselines "
+                                                                                                 "e.g. ESAN sampling, "
+                                                                                                 "choose subgraphs by "
+                                                                                                 "fraction or number "
+                                                                                                 "k")
+    parser.add_argument('--esan_frac', type=float, default=0.1, help="Only for baselines, see --sample_mode")
+    parser.add_argument('--esan_k', type=int, default=3, help="Only for baselines, see --sample_mode")
+
+    parser.add_argument('--debug', action='store_true', help='when debugging, take a small subset of the datasets')
+    parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
 
     return parser.parse_args()
 
@@ -50,13 +58,16 @@ def get_logger(folder_path: str) -> Logger:
 
 if __name__ == '__main__':
     args = get_parse()
-    
-    if args.dataset.lower() == 'zinc':
-        if not os.path.isdir(args.data_path):
-            os.mkdir(args.data_path)
-        dataset = TUDataset(args.data_path, name="ZINC_full")
-    else:
-        raise NotImplementedError
+
+    assert ((not args.train_embd_model) or (args.policy == 'null')), "Not support sampling the original data with I-MLE"
+    train_loader, val_loader, test_loader = get_data(args.dataset,
+                                                     args.data_path,
+                                                     args.batch_size,
+                                                     args.policy,
+                                                     args.sample_mode,
+                                                     args.esan_frac,
+                                                     args.esan_k,
+                                                     args.debug, )
 
     hparams = f'hid_{args.hid_size}_' \
               f'dp_{args.dropout}_' \
@@ -74,30 +85,9 @@ if __name__ == '__main__':
     os.mkdir(folder_name)
     writer = SummaryWriter(folder_name)
     logger = get_logger(folder_name)
-    
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f'Using device: {device}')
-
-    # infile = open("./datasets/indices/test.index.txt", "r")
-    # for line in infile:
-    #     test_indices = line.split(",")
-    #     test_indices = [int(i) for i in test_indices]
-
-    infile = open("./datasets/indices/val.index.txt", "r")
-    for line in infile:
-        val_indices = line.split(",")
-        val_indices = [int(i) for i in val_indices]
-
-    infile = open("./datasets/indices/train.index.txt", "r")
-    for line in infile:
-        train_indices = line.split(",")
-        train_indices = [int(i) for i in train_indices]
-
-    train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=True,
-                                n_subgraphs=0)
-    # test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=False,
-    #                            n_subgraphs=0)
-    val_loader = MYDataLoader(dataset[225011:][val_indices], batch_size=args.batch_size, shuffle=False, n_subgraphs=0)
 
     if args.model.lower() == 'gine':
         model = NetGINE(args.hid_size, args.dropout, args.num_convlayers).to(device)
@@ -116,7 +106,7 @@ if __name__ == '__main__':
                                                            factor=0.5, patience=20,
                                                            min_lr=1e-5)
     criterion = torch.nn.L1Loss()
-    
+
     best_val_loss = 1e5
     patience = 0
     for epoch in range(args.epochs):
@@ -136,9 +126,9 @@ if __name__ == '__main__':
                               model,
                               criterion,
                               device)
-        
+
         scheduler.step(val_loss)
-        
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience = 0

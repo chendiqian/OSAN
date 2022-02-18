@@ -22,16 +22,20 @@ def get_parse() -> Namespace:
     parser.add_argument('--patience', type=int, default=100, help='for early stop')
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
-    parser.add_argument('--num_convlayers', type=int, default=3)
+    parser.add_argument('--num_convlayers', type=int, default=4)
     parser.add_argument('--gnn_jk', type=str, default=None, choices=[None, 'concat', 'residual'])
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--sample_k', type=int, default=30, help='top-k nodes, i.e. n_nodes of each subgraph')
-    parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
     parser.add_argument('--data_path', type=str, default='./datasets')
     parser.add_argument('--log_path', type=str, default='./logs')
     parser.add_argument('--save_freq', type=int, default=100)
 
+    # I-MLE
+    parser.add_argument('--sample_k', type=int, default=30, help='top-k nodes, i.e. n_nodes of each subgraph')
+    parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
+    parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
+
+    # ESAN
     parser.add_argument('--policy', type=str, default='null', choices=['null', 'node_deleted'])
     parser.add_argument('--sample_mode', type=str, default='int', choices=['float', 'int'], help="Only for baselines "
                                                                                                  "e.g. ESAN sampling, "
@@ -43,7 +47,6 @@ def get_parse() -> Namespace:
     parser.add_argument('--voting', type=int, default=1, help="Only for baselines, random sampling for majority")
 
     parser.add_argument('--debug', action='store_true', help='when debugging, take a small subset of the datasets')
-    parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
 
     return parser.parse_args()
 

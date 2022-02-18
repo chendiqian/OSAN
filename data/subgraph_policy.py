@@ -4,7 +4,7 @@
 
 import math
 import random
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Union
 
 import torch
 from torch_geometric.data import Batch, Data
@@ -27,7 +27,8 @@ class Sampler:
         self.fraction = fraction
         self.num_subgraph = num_subgraph
 
-    def __call__(self, data_list: List[Data]) -> List[Data]:
+    def __call__(self, batch: Union[Data, Batch]) -> List[Data]:
+        data_list = Batch.to_data_list(batch)
         count = math.ceil(self.fraction * len(data_list)) if self.mode == 'float' else self.num_subgraph
         sampled_subgraphs = random.sample(data_list, count)
         return sampled_subgraphs
@@ -42,8 +43,7 @@ class Graph2Subgraph:
         if self.process_subgraphs is not None:
             subgraphs = [self.process_subgraphs(s) for s in subgraphs]
 
-        # return Batch.from_data_list(subgraphs)
-        return subgraphs
+        return Batch.from_data_list(subgraphs)
 
     def to_subgraphs(self, data):
         raise NotImplementedError

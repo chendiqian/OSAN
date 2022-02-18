@@ -19,7 +19,7 @@ from torch_geometric.data.separate import separate
 
 class CustomTUDataset(InMemoryDataset):
     """
-    Process the graph and store the subgraphs in lists of lists
+    Process the graph and store the subgraphs in lists of batches
     Add tqdm for inspection
     """
 
@@ -149,7 +149,7 @@ class CustomTUDataset(InMemoryDataset):
         assert (self.pre_transform is not None)
         data_list = [self.raw_get(idx) for idx in range(self.raw_len())]
         data_list = [self.pre_transform(data) for data in tqdm(data_list)]
-        self.data, self.slices = data_list[0][0], None
+        self.data, self.slices = data_list[0], None
         self.data_list = data_list
 
         torch.save((self.data, self.slices, self.data_list), self.processed_paths[0])

@@ -23,7 +23,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
     parser.add_argument('--num_convlayers', type=int, default=3)
-    parser.add_argument('--gnn_jk', type=str, default='concat', choices=[None, 'concat', 'residual'])
+    parser.add_argument('--gnn_jk', type=str, default=None, choices=[None, 'concat', 'residual'])
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--sample_k', type=int, default=30, help='top-k nodes, i.e. n_nodes of each subgraph')
@@ -80,7 +80,8 @@ if __name__ == '__main__':
               f'dp_{args.dropout}_' \
               f'reg_{args.reg}_' \
               f'n_lay_{args.num_convlayers}_' \
-              f'bsize_{args.batch_size}_' \
+              f'bsize_{args.batch_size}_'\
+              f'jk_{args.gnn_jk}_' \
               f'k_{args.sample_k}_' \
               f'n_subg_{args.num_subgraphs}'
 

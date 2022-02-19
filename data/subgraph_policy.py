@@ -54,7 +54,9 @@ class NodeDeleted(Graph2Subgraph):
         """
         In the original code they don't relabel the new edge_index and don't remove the node attribute from data.x
         https://github.com/beabevi/ESAN/blob/master/data.py#L270
-        But subgraph will remove the self-loops, so relabeling is equivalent.
+
+        Here we do not remove x, because in I-MLE the node is also not removed. If the node attribute is removed,
+        GIN results into different results.
 
         :param data:
         :return:
@@ -65,14 +67,14 @@ class NodeDeleted(Graph2Subgraph):
         for i in range(data.num_nodes):
             subset = torch.cat([all_nodes[:i], all_nodes[i + 1:]])
             subgraph_edge_index, subgraph_edge_attr = subgraph(subset, data.edge_index, data.edge_attr,
-                                                               relabel_nodes=True, num_nodes=data.num_nodes)
+                                                               relabel_nodes=False, num_nodes=data.num_nodes)
 
             subgraphs.append(
                 Data(
-                    x=data.x[subset, :],
+                    x=data.x,
                     edge_index=subgraph_edge_index,
                     edge_attr=subgraph_edge_attr,
-                    num_nodes=data.num_nodes - 1,
+                    num_nodes=data.num_nodes,
                     y=data.y,
                 )
             )

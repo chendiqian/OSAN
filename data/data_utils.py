@@ -15,6 +15,15 @@ class SubgraphSetBatch:
                 setattr(self, k, v.to(device))
         return self
 
+    def __repr__(self):
+        string = []
+        for k, v in self.__dict__.items():
+            if isinstance(v, Tensor):
+                string.append(k + f': Tensor {list(v.shape)}')
+            else:
+                string.append(k + ': ' + type(v).__name__)
+        return ' '.join(string)
+
 
 # SubgraphSetBatch = namedtuple(
 #     'SubgraphSetBatch', [

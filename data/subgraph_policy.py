@@ -30,7 +30,7 @@ class Sampler:
     def __call__(self, batch: Union[Data, Batch]) -> List[Data]:
         data_list = Batch.to_data_list(batch)
         count = math.ceil(self.fraction * len(data_list)) if self.mode == 'float' else self.num_subgraph
-        sampled_subgraphs = random.sample(data_list, count)
+        sampled_subgraphs = random.sample(data_list, count) if count < len(data_list) else data_list
         return sampled_subgraphs
 
 

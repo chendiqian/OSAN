@@ -86,7 +86,9 @@ if __name__ == '__main__':
               f'bsize_{args.batch_size}_'\
               f'jk_{args.gnn_jk}_' \
               f'k_{args.sample_k}_' \
-              f'n_subg_{args.num_subgraphs}'
+              f'n_subg_{args.num_subgraphs}_' \
+              f'pol_{args.policy}_' \
+              f'esank_{args.esan_k}'
 
     if not os.path.isdir(args.log_path):
         os.mkdir(args.log_path)

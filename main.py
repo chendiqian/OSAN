@@ -65,14 +65,7 @@ if __name__ == '__main__':
     args = get_parse()
 
     assert ((not args.train_embd_model) or (args.policy == 'null')), "Not support sampling the original data with I-MLE"
-    train_loader, val_loader, test_loader = get_data(args.dataset,
-                                                     args.data_path,
-                                                     args.batch_size,
-                                                     args.policy,
-                                                     args.sample_mode,
-                                                     args.esan_frac,
-                                                     args.esan_k,
-                                                     args.debug)
+    train_loader, val_loader, test_loader = get_data(args)
 
     if args.dataset.lower() in ['zinc']:
         task_type = 'regression'

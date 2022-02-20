@@ -1,4 +1,4 @@
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Union, Tuple, Sequence
 from collections import namedtuple
 
 import torch
@@ -10,9 +10,23 @@ from grad_utils import Nodemask2Edgemask, nodemask2edgemask
 from data import SubgraphSetBatch
 
 
+def get_ptr(graph_idx: Tensor, device: torch.device) -> Tensor:
+    """
+    Given indices of graph, return ptr
+    e.g. [1,1,2,2,2,3,3,4] -> [0, 2, 5, 7]
+
+    :param graph_idx:
+    :param device:
+    :return:
+    """
+    return torch.cat((torch.tensor([0], device=device),
+                      (graph_idx[1:] > graph_idx[:-1]).nonzero().reshape(-1) + 1,
+                      torch.tensor([len(graph_idx)], device=device)), dim=0)
+
+
 def rand_sampling(graph: Data,
                   n_subgraphs: int,
-                  n_drop_nodes: int = 1) -> Tuple[List[Data], int]:
+                  node_per_subgraph: int = -1) -> Tuple[List[Data], int]:
     """
     Sample subgraphs.
     TODO: replace for-loop with functorch.vmap https://pytorch.org/tutorials/prototype/vmap_recipe.html?highlight=vmap
@@ -20,25 +34,28 @@ def rand_sampling(graph: Data,
 
     :param graph:
     :param n_subgraphs:
-    :param n_drop_nodes:
+    :param node_per_subgraph:
     :return:
         A list of graphs and their index masks
     """
+    n_nodes = graph.num_nodes
 
-    n_nodes = graph.x.shape[0]
-    res_list = []
+    if node_per_subgraph < 0:  # drop nodes
+        node_per_subgraph += n_nodes
+
     batch_num_nodes = 0
+    idx_list = []
     for i in range(n_subgraphs):
-        indices = torch.randperm(n_nodes)[:-n_drop_nodes]
+        indices = torch.randperm(n_nodes)[:node_per_subgraph]
         sort_indices = torch.sort(indices).values
         batch_num_nodes += len(indices)
+        idx_list.append(sort_indices)
 
-        res_list += subgraphs_from_index(graph, sort_indices)
-
+    res_list = subgraphs_from_index(graph, idx_list)
     return res_list, batch_num_nodes
 
 
-def subgraphs_from_index(graph: Data, indices: Tensor) -> List[Data]:
+def subgraphs_from_index(graph: Data, indices: Union[Tensor, List[Tensor]]) -> List[Data]:
     """
     Given a graph and a tensor whose rows are indices (The indices are sorted)
     Returns a list of subgraphs indicated by the indices
@@ -47,13 +64,13 @@ def subgraphs_from_index(graph: Data, indices: Tensor) -> List[Data]:
     :param indices:
     :return:
     """
-    if indices.ndim < 2:
+    if isinstance(indices, Tensor) and indices.ndim < 2:
         indices = indices[None]
 
     graphs = []
     for idx in indices:
-        edge_index, edge_attr = subgraph(idx, graph.edge_index, graph.edge_attr, relabel_nodes=True)
-        graphs.append(Data(x=graph.x[idx],
+        edge_index, edge_attr = subgraph(idx, graph.edge_index, graph.edge_attr, relabel_nodes=False)
+        graphs.append(Data(x=graph.x,
                            edge_index=edge_index,
                            edge_attr=edge_attr,
                            y=graph.y))
@@ -107,29 +124,33 @@ def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True) -> Tu
 
 
 def construct_subgraph_batch(graph_list: List[Data],
-                             sample_node_idx: List[Tensor],
-                             edge_weights: List[Tensor],
-                             device: torch.device):
+                             num_subgraphs: List[int],
+                             edge_weights: Optional[Sequence[Tensor]] = None,
+                             device: torch.device = 'cpu'):
     """
 
     :param graph_list: a list of [subgraph1_1, subgraph1_2, subgraph1_3, subgraph2_1, ...]
-    :param sample_node_idx: a list of 1 / 0 tensors indicating the nodes selected, shape (N, K)
+    :param num_subgraphs: a list number of subgraphs
     :param edge_weights:
     :param device:
     :return:
     """
     # new batch
     batch = Batch.from_data_list(graph_list, None, None)
-    original_graph_mask = torch.cat([torch.full((idx.shape[1],), i, device=device)
-                                     for i, idx in enumerate(sample_node_idx)], dim=0)
-    ptr = torch.cat((torch.tensor([0], device=device),
-                     (original_graph_mask[1:] > original_graph_mask[:-1]).nonzero().reshape(-1) + 1,
-                     torch.tensor([len(original_graph_mask)], device=device)), dim=0)
+    original_graph_mask = torch.cat([torch.full((n_subg,), i, device=device)
+                                     for i, n_subg in enumerate(num_subgraphs)], dim=0)
+    ptr = get_ptr(original_graph_mask, device)
+
+    # TODO: duplicate labels or aggregate the embeddings for original labels? potential problem: cannot split the
+    #  batch because y shape inconsistent:
+    #  https://pytorch-geometric.readthedocs.io/en/latest/modules/data.html#torch_geometric.data.Batch.to_data_list.
+    #  need to check `batch._slice_dict` and `batch._inc_dict`
 
     return SubgraphSetBatch(x=batch.x,
                             edge_index=batch.edge_index[torch.LongTensor([1, 0]), :],  # flip the direction of message
                             edge_attr=batch.edge_attr,
-                            edge_weight=torch.cat(edge_weights, dim=0),
+                            edge_weight=torch.cat(edge_weights, dim=0) if isinstance(edge_weights, (list, tuple))
+                            else edge_weights,
                             y=batch.y[ptr[:-1]],
                             batch=batch.batch,
                             inter_graph_idx=original_graph_mask,

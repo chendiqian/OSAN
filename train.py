@@ -104,7 +104,7 @@ def train(sample_k: int,
                 *[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
                   zip(graphs, sample_node_idx)])
             list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
-            data = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
+            data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights, device)
 
         pred = model(data)
         loss = criterion(pred, data.y)
@@ -150,7 +150,7 @@ def validation(sample_k: int,
                 list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
                 # new batch
-                data = construct_subgraph_batch(list_subgraphs, sample_node_idx, edge_weights, device)
+                data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights, device)
 
             pred = model(data)
             loss = criterion(pred, data.y)

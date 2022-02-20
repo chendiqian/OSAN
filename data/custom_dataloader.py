@@ -8,8 +8,7 @@ from torch.utils.data.dataloader import default_collate
 from torch_geometric.loader.dataloader import Collater
 from torch_geometric.data import Batch, Data, Dataset, HeteroData
 
-from subgraph_utils import rand_sampling
-from data import SubgraphSetBatch
+from subgraph_utils import rand_sampling, construct_subgraph_batch
 
 
 # class Collater:
@@ -59,37 +58,22 @@ class SampleCollater:
 
     def __init__(self,
                  n_subgraphs: int = 0,
+                 node_per_subgraph: int = -1,
                  follow_batch: Optional[List[str]] = None,
                  exclude_keys: Optional[List[str]] = None):
         self.n_subgraphs = n_subgraphs
+        self.node_per_subgraph = node_per_subgraph
+        assert follow_batch is None and exclude_keys is None, "Not supported"
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 
     def __call__(self, batch: List[Data]):
-        # TODO: pass number of n_drop_nodes into args
-
         graph_list = []
-        inter_graph_idx = []
         for i, g in enumerate(batch):
-            subgraphs, _ = rand_sampling(g, self.n_subgraphs)
+            subgraphs, _ = rand_sampling(g, self.n_subgraphs, self.node_per_subgraph)
             graph_list += subgraphs
-            inter_graph_idx += torch.full((self.n_subgraphs,), i)
 
-        assert isinstance(graph_list[0], (Data, HeteroData)) and isinstance(inter_graph_idx[0], Tensor)
-
-        res_data = Batch.from_data_list(graph_list, self.follow_batch, self.exclude_keys)
-        inter_graph_idx = default_collate(inter_graph_idx)
-        res_data.inter_graph_idx = inter_graph_idx
-        inter_graph_idx_aux = torch.cat((torch.tensor([-1]), inter_graph_idx), dim=0)
-        ptr = (inter_graph_idx_aux[1:] > inter_graph_idx_aux[:-1]).nonzero().reshape(-1)
-
-        # TODO: duplicate labels or aggregate the embeddings for original labels? potential problem: cannot split the
-        #  batch because y shape inconsistent:
-        #  https://pytorch-geometric.readthedocs.io/en/latest/modules/data.html#torch_geometric.data.Batch.to_data_list.
-        #  need to check `batch._slice_dict` and `batch._inc_dict`
-        res_data.y = res_data.y[ptr]
-
-        return res_data
+        return construct_subgraph_batch(graph_list, [self.n_subgraphs] * len(batch), None, batch[0].x.device)
 
 
 class SubgraphSetCollator:
@@ -101,29 +85,17 @@ class SubgraphSetCollator:
     def __init__(self,
                  follow_batch: Optional[List[str]] = None,
                  exclude_keys: Optional[List[str]] = None):
+        assert follow_batch is None and exclude_keys is None, "Not supported"
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 
     def __call__(self, batch_list: List[List[Data]]):
         list_subgraphs = list(itertools.chain.from_iterable(batch_list))
-        batch = Batch.from_data_list(list_subgraphs, self.follow_batch, self.exclude_keys)
 
-        original_graph_mask = torch.cat([torch.full((len(g_list),), i, device=batch.x.device)
-                                         for i, g_list in enumerate(batch_list)], dim=0)
-        ptr = torch.cat((torch.tensor([0], device=batch.x.device),
-                         (original_graph_mask[1:] > original_graph_mask[:-1]).nonzero().reshape(-1) + 1,
-                         torch.tensor([len(original_graph_mask)], device=batch.x.device)), dim=0)
-
-        return SubgraphSetBatch(x=batch.x,
-                                # flip the direction of message
-                                edge_index=batch.edge_index[torch.LongTensor([1, 0]), :],
-                                edge_attr=batch.edge_attr,
-                                edge_weight=None,
-                                y=batch.y[ptr[:-1]],
-                                batch=batch.batch,
-                                inter_graph_idx=original_graph_mask,
-                                ptr=ptr,
-                                num_graphs=batch.num_graphs)
+        return construct_subgraph_batch(list_subgraphs,
+                                        [len(g_list) for g_list in batch_list],
+                                        None,
+                                        batch_list[0][0].x.device)
 
 
 class MYDataLoader(torch.utils.data.DataLoader):
@@ -148,8 +120,10 @@ class MYDataLoader(torch.utils.data.DataLoader):
             dataset: Union[Dataset, List[Data], List[HeteroData]],
             batch_size: int = 1,
             shuffle: bool = False,
-            n_subgraphs: int = 0,
             subgraph_loader: bool = False,
+            sample: bool = False,
+            n_subgraphs: int = 0,
+            node_per_subgraph: int = -1,
             follow_batch: Optional[List[str]] = None,
             exclude_keys: Optional[List[str]] = None,
             **kwargs,
@@ -159,8 +133,11 @@ class MYDataLoader(torch.utils.data.DataLoader):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 
-        # collate_fn = partial(SampleCollater, n_subgraphs=n_subgraphs) if n_subgraphs > 0 else Collater
-        collate_fn = SubgraphSetCollator if subgraph_loader else Collater
+        collate_fn = Collater
+        if subgraph_loader:
+            collate_fn = SubgraphSetCollator
+        elif sample and n_subgraphs > 0:
+            collate_fn = partial(SampleCollater, n_subgraphs=n_subgraphs, node_per_subgraph=node_per_subgraph)
 
         super().__init__(
             dataset,

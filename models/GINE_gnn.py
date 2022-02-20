@@ -82,6 +82,7 @@ class NetGINE(torch.nn.Module):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         x = torch.relu(self.fc3(x))
-        x = global_mean_pool(x, data.inter_graph_idx) if data.inter_graph_idx is not None else x
+        if hasattr(data, 'inter_graph_idx') and data.inter_graph_idx is not None:
+            x = global_mean_pool(x, data.inter_graph_idx)
         x = self.fc4(x)
         return x.view(-1)

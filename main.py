@@ -61,6 +61,25 @@ def get_logger(folder_path: str) -> Logger:
     return logger
 
 
+def naming(args: Namespace) -> str:
+    name = f'hid_{args.hid_size}_' \
+              f'dp_{args.dropout}_' \
+              f'reg_{args.reg}_' \
+              f'n_lay_{args.num_convlayers}_' \
+              f'bsize_{args.batch_size}_'\
+              f'jk_{args.gnn_jk}_'
+
+    if args.policy == 'null':
+        name += f'knodes_{args.sample_k}_' \
+                f'n_subg_{args.num_subgraphs}_' \
+                f'IMLE_{args.train_embd_model}_'
+    else:
+        name += f'policy_{args.policy}_'\
+                f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
+
+    return name + f'voting_{args.voting}'
+
+
 if __name__ == '__main__':
     args = get_parse()
 
@@ -72,16 +91,7 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
 
-    hparams = f'hid_{args.hid_size}_' \
-              f'dp_{args.dropout}_' \
-              f'reg_{args.reg}_' \
-              f'n_lay_{args.num_convlayers}_' \
-              f'bsize_{args.batch_size}_'\
-              f'jk_{args.gnn_jk}_' \
-              f'k_{args.sample_k}_' \
-              f'n_subg_{args.num_subgraphs}_' \
-              f'pol_{args.policy}_' \
-              f'esank_{args.esan_k}'
+    hparams = naming(args)
 
     if not os.path.isdir(args.log_path):
         os.mkdir(args.log_path)

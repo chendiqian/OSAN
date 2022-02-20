@@ -1,5 +1,5 @@
 # I-MLE sampling
-Specify `--sample_k`, `--num_subgraphs`, `--train_embd_model` hparams. `--sample_k` can be positive integers as number of nodes per subgraph or negative number as node deletion. 
+Specify `--sample_k`, `--num_subgraphs`, especially `--train_embd_model` hparams. `--sample_k` can be positive integers as number of nodes per subgraph or negative number as node deletion. 
 
 e.g.
 
@@ -14,6 +14,14 @@ e.g.
 
 # Normal training
 
+No subgraph thing. Take a normal batch from the dataset and train it.
+
 e.g.
 
-`python main.py --batch_size 128 --epochs 1000 --policy null`
+`python main.py --batch_size 128 --epochs 1000 --policy null --num_subgraphs 0`
+
+# Sample on the fly
+
+Functionally similar to but practically different from ESAN. The latter keeps a _deck_ of subgraphs as a new dataset, but can be expensive when, let's say sample 15 nodes from the subgraph. 
+
+`python main.py --batch_size 128 --epochs 1000 --policy null --sample_k -1 --num_subgraphs 3`

@@ -21,7 +21,7 @@ Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
 
-def make_get_batch_topk(ptr, sample_k, return_list):
+def make_get_batch_topk(ptr, sample_k, return_list, sample):
     @torch.no_grad()
     def torch_get_batch_topk(logits: torch.Tensor) -> torch.Tensor:
         """
@@ -36,6 +36,11 @@ def make_get_batch_topk(ptr, sample_k, return_list):
         sample_node_idx = []
         for l in logits:
             k = sample_k + l.shape[0] if sample_k < 0 else sample_k  # e.g. -1 -> remove 1 node
+
+            if sample:
+                noise = torch.randn(l.shape, device=l.device) * (l.std(0) * 0.1)
+                l = l.clone() + noise
+
             thresh = torch.topk(l, k=min(k, l.shape[0]), dim=0, sorted=True).values[-1, :]  # kth largest
             # shape (n_nodes, dim)
             mask = (l >= thresh[None]).to(torch.float)
@@ -85,7 +90,7 @@ def train(sample_k: int,
         if emb_model is not None:
             split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
             logits = emb_model(data)
-            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=False)
+            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=False, sample=False)
 
             @imle(target_distribution=target_distribution,
                   noise_distribution=noise_distribution,
@@ -142,7 +147,7 @@ def validation(sample_k: int,
             if emb_model is not None:
                 split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
                 logits = emb_model(data)
-                torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True)
+                torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True, sample=True)
                 sample_node_idx = torch_get_batch_topk(logits)
                 graphs = Batch.to_data_list(data)
                 list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in

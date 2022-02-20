@@ -44,7 +44,7 @@ def get_parse() -> Namespace:
                                                                                                  "k")
     parser.add_argument('--esan_frac', type=float, default=0.1, help="Only for baselines, see --sample_mode")
     parser.add_argument('--esan_k', type=int, default=3, help="Only for baselines, see --sample_mode")
-    parser.add_argument('--voting', type=int, default=1, help="Only for baselines, random sampling for majority")
+    parser.add_argument('--voting', type=int, default=5, help="Only for baselines, random sampling for majority")
 
     parser.add_argument('--debug', action='store_true', help='when debugging, take a small subset of the datasets')
 
@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                           factor=0.5, patience=20,
+                                                           factor=0.5, patience=5,
                                                            min_lr=1e-5)
     criterion = torch.nn.L1Loss()
 
@@ -166,3 +166,5 @@ if __name__ == '__main__':
             torch.save(model.state_dict(), f'{folder_name}/model{epoch}.pt')
             if args.train_embd_model:
                 torch.save(emb_model.state_dict(), f'{folder_name}/embd_model{epoch}.pt')
+
+    logger.info(f'Best val loss: {best_val_loss}')

@@ -10,10 +10,27 @@ import torch
 from torch_geometric.data import Batch, Data
 from torch_geometric.utils import k_hop_subgraph, subgraph
 
-from data import SubgraphSetBatch
+from subgraph_utils import rand_sampling
 
 
-class Sampler:
+class RawSampler:
+    def __init__(self, n_subgraphs: int, node_per_subgraph: int):
+        """
+        Sample from a single graph, to create a batch of subgraphs.
+        Especially suitable for situations where the deck is too large and inefficient.
+
+        :param n_subgraphs:
+        :param node_per_subgraph:
+        """
+        self.n_subgraphs = n_subgraphs
+        self.node_per_subgraph = node_per_subgraph
+
+    def __call__(self, data: Union[Data, Batch]) -> List[Data]:
+        subgraphs, _ = rand_sampling(data, self.n_subgraphs, self.node_per_subgraph)
+        return subgraphs
+
+
+class DeckSampler:
     def __init__(self, mode: str, fraction: float, num_subgraph: int):
         """
         Sample subgraphs from a full deck (given by the dataset[idx])

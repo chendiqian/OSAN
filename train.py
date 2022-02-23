@@ -14,6 +14,8 @@ from imle.wrapper import imle
 from imle.target import TargetDistribution
 from imle.noise import SumOfGammaNoiseDistribution
 
+DATASET_MEAN_NUM_NODE_DICT = {'zinc': 23.1514}
+
 Optimizer = Union[torch.optim.Adam,
                   torch.optim.SGD]
 Emb_model = Union[NetGCN]
@@ -56,6 +58,7 @@ def make_get_batch_topk(ptr, sample_k, return_list, sample):
 
 
 def train(sample_k: int,
+          beta: float,
           dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
           emb_model: Emb_model,
           model: Train_model,
@@ -66,6 +69,7 @@ def train(sample_k: int,
     A train step
 
     :param sample_k:
+    :param beta:
     :param dataloader:
     :param emb_model:
     :param model:
@@ -80,8 +84,11 @@ def train(sample_k: int,
     train_losses = torch.tensor(0., device=device)
     num_graphs = 0
 
-    target_distribution = TargetDistribution(alpha=1.0, beta=10.0)
-    noise_distribution = SumOfGammaNoiseDistribution(k=10, nb_iterations=100, device=device)
+    temp = float(sample_k if sample_k > 0 else DATASET_MEAN_NUM_NODE_DICT['zinc'] + sample_k)
+    target_distribution = TargetDistribution(alpha=1.0, beta=beta)
+    noise_distribution = SumOfGammaNoiseDistribution(k=temp,
+                                                     nb_iterations=100,
+                                                     device=device)
 
     for data in dataloader:
         data = data.to(device)
@@ -94,8 +101,8 @@ def train(sample_k: int,
 
             @imle(target_distribution=target_distribution,
                   noise_distribution=noise_distribution,
-                  input_noise_temperature=1.0,
-                  target_noise_temperature=1.0,
+                  input_noise_temperature=temp,
+                  target_noise_temperature=temp,
                   nb_samples=1)
             def imle_get_batch_topk(logits: torch.Tensor):
                 return torch_get_batch_topk(logits)
@@ -131,7 +138,6 @@ def validation(sample_k: int,
                task_type: str,
                voting: int,
                device: Union[str, torch.device]) -> Union[torch.Tensor, torch.FloatType, float]:
-
     assert task_type == 'regression', "Does not support tasks other than regression"
 
     if emb_model is not None:
@@ -155,7 +161,8 @@ def validation(sample_k: int,
                 list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 
                 # new batch
-                data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights, device)
+                data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights,
+                                                device)
 
             pred = model(data)
             loss = criterion(pred, data.y)

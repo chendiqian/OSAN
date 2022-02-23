@@ -20,6 +20,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--hid_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--patience', type=int, default=100, help='for early stop')
+    parser.add_argument('--lr_patience', type=int, default=20)
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
     parser.add_argument('--num_convlayers', type=int, default=4)
@@ -34,6 +35,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--sample_k', type=int, default=30, help='top-k nodes, i.e. n_nodes of each subgraph')
     parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
+    parser.add_argument('--beta', type=float, default=10.)
 
     # ESAN
     parser.add_argument('--policy', type=str, default='null', choices=['null', 'node_deleted'])
@@ -119,7 +121,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                           factor=0.5, patience=5,
+                                                           factor=0.5, patience=args.lr_patience,
                                                            min_lr=1e-5)
     criterion = torch.nn.L1Loss()
 
@@ -127,6 +129,7 @@ if __name__ == '__main__':
     patience = 0
     for epoch in range(args.epochs):
         train_loss = train(args.sample_k,
+                           args.beta,
                            train_loader,
                            emb_model,
                            model,

@@ -64,12 +64,14 @@ def get_logger(folder_path: str) -> Logger:
 
 
 def naming(args: Namespace) -> str:
-    name = f'hid_{args.hid_size}_' \
-              f'dp_{args.dropout}_' \
-              f'reg_{args.reg}_' \
-              f'n_lay_{args.num_convlayers}_' \
-              f'bsize_{args.batch_size}_'\
-              f'jk_{args.gnn_jk}_'
+    name = f'hid_{args.hid_size}_'\
+           f'lr_{args.lr}_' \
+           f'lr_patience_{args.lr_patience}_' \
+           f'dp_{args.dropout}_' \
+           f'reg_{args.reg}_' \
+           f'n_lay_{args.num_convlayers}_' \
+           f'bsize_{args.batch_size}_'\
+           f'jk_{args.gnn_jk}_'
 
     if args.policy == 'null':
         name += f'knodes_{args.sample_k}_' \
@@ -121,7 +123,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                           factor=0.5, patience=args.lr_patience,
+                                                           factor=0.316227766, patience=args.lr_patience,
                                                            min_lr=1e-5)
     criterion = torch.nn.L1Loss()
 

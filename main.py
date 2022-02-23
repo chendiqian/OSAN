@@ -9,7 +9,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from models import NetGINE, NetGCN
-from train import train, validation
+from train import Trainer
 from data.get_data import get_data
 
 
@@ -64,13 +64,13 @@ def get_logger(folder_path: str) -> Logger:
 
 
 def naming(args: Namespace) -> str:
-    name = f'hid_{args.hid_size}_'\
+    name = f'hid_{args.hid_size}_' \
            f'lr_{args.lr}_' \
            f'lr_patience_{args.lr_patience}_' \
            f'dp_{args.dropout}_' \
            f'reg_{args.reg}_' \
            f'n_lay_{args.num_convlayers}_' \
-           f'bsize_{args.batch_size}_'\
+           f'bsize_{args.batch_size}_' \
            f'jk_{args.gnn_jk}_'
 
     if args.policy == 'null':
@@ -78,7 +78,7 @@ def naming(args: Namespace) -> str:
                 f'n_subg_{args.num_subgraphs}_' \
                 f'IMLE_{args.train_embd_model}_'
     else:
-        name += f'policy_{args.policy}_'\
+        name += f'policy_{args.policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
 
     return name + f'voting_{args.voting}'
@@ -122,54 +122,40 @@ if __name__ == '__main__':
         train_params = model.parameters()
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                           factor=0.316227766, patience=args.lr_patience,
-                                                           min_lr=1e-5)
-    criterion = torch.nn.L1Loss()
+    trainer = Trainer(task_type="regression",
+                      sample_k=args.sample_k,
+                      voting=args.voting,
+                      max_patience=args.patience,
+                      optimizer=optimizer,
+                      scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                                           factor=0.316227766,
+                                                                           patience=args.lr_patience,
+                                                                           min_lr=1e-5),
+                      criterion=torch.nn.L1Loss(),
+                      train_embd_model=args.train_embd_model,
+                      beta=args.beta,
+                      device=device)
 
-    best_val_loss = 1e5
-    patience = 0
     for epoch in range(args.epochs):
-        train_loss = train(args.sample_k,
-                           args.beta,
-                           train_loader,
-                           emb_model,
-                           model,
-                           optimizer,
-                           criterion,
-                           device)
+        train_loss = trainer.train(train_loader, emb_model, model)
+        val_loss, early_stop = trainer.validation(val_loader, emb_model, model)
 
-        val_loss = validation(args.sample_k,
-                              val_loader,
-                              emb_model,
-                              model,
-                              criterion,
-                              task_type,
-                              args.voting,
-                              device)
-
-        scheduler.step(val_loss)
-
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            patience = 0
-        else:
-            patience += 1
-            if patience > args.patience:
-                logger.info('early stopping')
-                break
+        if early_stop:
+            logger.info('early stopping')
+            break
 
         logger.info(f'epoch: {epoch}, '
                     f'training loss: {train_loss}, '
                     f'val loss: {val_loss}, '
-                    f'patience: {patience}')
+                    f'patience: {trainer.patience}')
         writer.add_scalar('loss/training loss', train_loss, epoch)
         writer.add_scalar('loss/val loss', val_loss, epoch)
-        writer.add_scalar('lr', scheduler.optimizer.param_groups[0]['lr'], epoch)
+        writer.add_scalar('lr', trainer.scheduler.optimizer.param_groups[0]['lr'], epoch)
 
         if epoch % args.save_freq == 0:
             torch.save(model.state_dict(), f'{folder_name}/model{epoch}.pt')
             if args.train_embd_model:
                 torch.save(emb_model.state_dict(), f'{folder_name}/embd_model{epoch}.pt')
 
-    logger.info(f'Best val loss: {best_val_loss}')
+    logger.info(f'Best val loss: {trainer.best_val_loss}')
+    trainer.save_curve(folder_name)

@@ -1,5 +1,8 @@
+import os
 from typing import Union
+from collections import defaultdict
 import itertools
+import pickle
 
 import torch
 from torch.utils.data import DataLoader as TorchDataLoader
@@ -18,6 +21,7 @@ DATASET_MEAN_NUM_NODE_DICT = {'zinc': 23.1514}
 
 Optimizer = Union[torch.optim.Adam,
                   torch.optim.SGD]
+Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau]
 Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
@@ -57,117 +61,156 @@ def make_get_batch_topk(ptr, sample_k, return_list, sample):
     return torch_get_batch_topk
 
 
-def train(sample_k: int,
-          beta: float,
-          dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
-          emb_model: Emb_model,
-          model: Train_model,
-          optimizer: Optimizer,
-          criterion: Loss,
-          device: Union[str, torch.device]) -> Union[torch.Tensor, torch.FloatType, float]:
-    """
-    A train step
+class Trainer:
+    def __init__(self,
+                 task_type: str,
+                 sample_k: int,
+                 voting: int,
+                 max_patience: int,
+                 optimizer: Optimizer,
+                 scheduler: Scheduler,
+                 criterion: Loss,
+                 train_embd_model: bool,
+                 beta: float,
+                 device: Union[str, torch.device]):
+        """
 
-    :param sample_k:
-    :param beta:
-    :param dataloader:
-    :param emb_model:
-    :param model:
-    :param optimizer:
-    :param criterion:
-    :param device:
-    :return:
-    """
-    if emb_model is not None:
-        emb_model.train()
-    model.train()
-    train_losses = torch.tensor(0., device=device)
-    num_graphs = 0
+        :param task_type:
+        :param sample_k:
+        :param voting:
+        :param max_patience:
+        :param optimizer:
+        :param scheduler:
+        :param criterion:
+        :param train_embd_model:
+        :param beta:
+        :param device:
+        """
+        super(Trainer, self).__init__()
 
-    temp = float(sample_k if sample_k > 0 else DATASET_MEAN_NUM_NODE_DICT['zinc'] + sample_k)
-    target_distribution = TargetDistribution(alpha=1.0, beta=beta)
-    noise_distribution = SumOfGammaNoiseDistribution(k=temp,
-                                                     nb_iterations=100,
-                                                     device=device)
+        assert task_type == 'regression', "Does not support tasks other than regression"
+        self.task_type = task_type
+        self.voting = voting
+        self.sample_k = sample_k
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.criterion = criterion
+        self.device = device
 
-    for data in dataloader:
-        data = data.to(device)
-        optimizer.zero_grad()
+        self.best_val_loss = 1e5
+        self.patience = 0
+        self.max_patience = max_patience
+
+        self.curves = defaultdict(list)
+
+        if train_embd_model:
+            self.temp = float(sample_k if sample_k > 0 else DATASET_MEAN_NUM_NODE_DICT['zinc'] + sample_k)
+            self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
+            self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
+                                                                  nb_iterations=100,
+                                                                  device=device)
+
+    def train(self,
+              dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
+              emb_model: Emb_model,
+              model: Train_model):
 
         if emb_model is not None:
-            split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
-            logits = emb_model(data)
-            torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=False, sample=False)
+            emb_model.train()
+        model.train()
+        train_losses = torch.tensor(0., device=self.device)
+        num_graphs = 0
 
-            @imle(target_distribution=target_distribution,
-                  noise_distribution=noise_distribution,
-                  input_noise_temperature=temp,
-                  target_noise_temperature=temp,
-                  nb_samples=1)
-            def imle_get_batch_topk(logits: torch.Tensor):
-                return torch_get_batch_topk(logits)
-
-            sample_node_idx = imle_get_batch_topk(logits)
-            # each mask has shape (n_nodes, n_subgraphs)
-            sample_node_idx = torch.split(sample_node_idx, split_idx)
-            # original graphs
-            graphs = Batch.to_data_list(data)
-            list_subgraphs, edge_weights = zip(
-                *[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
-                  zip(graphs, sample_node_idx)])
-            list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
-            data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights, device)
-
-        pred = model(data)
-        loss = criterion(pred, data.y)
-
-        loss.backward()
-        train_losses += loss * data.num_graphs
-        num_graphs += data.num_graphs
-        optimizer.step()
-
-    return train_losses.item() / num_graphs
-
-
-@torch.no_grad()
-def validation(sample_k: int,
-               dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
-               emb_model: Emb_model,
-               model: Train_model,
-               criterion: Loss,
-               task_type: str,
-               voting: int,
-               device: Union[str, torch.device]) -> Union[torch.Tensor, torch.FloatType, float]:
-    assert task_type == 'regression', "Does not support tasks other than regression"
-
-    if emb_model is not None:
-        emb_model.eval()
-    model.eval()
-    val_losses = torch.tensor(0., device=device)
-    num_graphs = 0
-
-    for v in range(voting):
         for data in dataloader:
-            data = data.to(device)
+            data = data.to(self.device)
+            self.optimizer.zero_grad()
 
             if emb_model is not None:
                 split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
                 logits = emb_model(data)
-                torch_get_batch_topk = make_get_batch_topk(split_idx, sample_k, return_list=True, sample=True)
-                sample_node_idx = torch_get_batch_topk(logits)
-                graphs = Batch.to_data_list(data)
-                list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
-                                                     zip(graphs, sample_node_idx)])
-                list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
+                torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_k, return_list=False, sample=False)
 
-                # new batch
+                @imle(target_distribution=self.target_distribution,
+                      noise_distribution=self.noise_distribution,
+                      input_noise_temperature=self.temp,
+                      target_noise_temperature=self.temp,
+                      nb_samples=1)
+                def imle_get_batch_topk(logits: torch.Tensor):
+                    return torch_get_batch_topk(logits)
+
+                sample_node_idx = imle_get_batch_topk(logits)
+                # each mask has shape (n_nodes, n_subgraphs)
+                sample_node_idx = torch.split(sample_node_idx, split_idx)
+                # original graphs
+                graphs = Batch.to_data_list(data)
+                list_subgraphs, edge_weights = zip(
+                    *[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
+                      zip(graphs, sample_node_idx)])
+                list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
                 data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights,
-                                                device)
+                                                self.device)
 
             pred = model(data)
-            loss = criterion(pred, data.y)
+            loss = self.criterion(pred, data.y)
 
-            val_losses += loss * data.num_graphs
+            loss.backward()
+            train_losses += loss * data.num_graphs
             num_graphs += data.num_graphs
+            self.optimizer.step()
 
-    return val_losses.item() / num_graphs
+        train_loss = train_losses.item() / num_graphs
+        self.curves['train'].append(train_loss)
+        return train_loss
+
+    @torch.no_grad()
+    def validation(self,
+                   dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
+                   emb_model: Emb_model,
+                   model: Train_model,):
+        if emb_model is not None:
+            emb_model.eval()
+        model.eval()
+        val_losses = torch.tensor(0., device=self.device)
+        num_graphs = 0
+
+        for v in range(self.voting):
+            for data in dataloader:
+                data = data.to(self.device)
+
+                if emb_model is not None:
+                    split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
+                    logits = emb_model(data)
+                    torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_k, return_list=True, sample=True)
+                    sample_node_idx = torch_get_batch_topk(logits)
+                    graphs = Batch.to_data_list(data)
+                    list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
+                                                         zip(graphs, sample_node_idx)])
+                    list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
+
+                    # new batch
+                    data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights,
+                                                    self.device)
+
+                pred = model(data)
+                loss = self.criterion(pred, data.y)
+
+                val_losses += loss * data.num_graphs
+                num_graphs += data.num_graphs
+
+        val_loss = val_losses.item() / num_graphs
+        self.scheduler.step(val_loss)
+
+        early_stop = False
+        if val_loss < self.best_val_loss:
+            self.best_val_loss = val_loss
+            self.patience = 0
+        else:
+            self.patience += 1
+            if self.patience > self.max_patience:
+                early_stop = True
+
+        self.curves['val'].append(val_loss)
+        return val_loss, early_stop
+
+    def save_curve(self, path):
+        pickle.dump(self.curves, open(os.path.join(path, 'curves.pkl'), "wb"))

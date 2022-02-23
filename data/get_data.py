@@ -29,7 +29,7 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
             dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full")
         else:   # ESAN: sample from the deck
             transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)
-            dataset = CustomTUDataset(args.data_path + '/deck', name="ZINC_full",
+            dataset = CustomTUDataset(args.data_path + f'/deck/{args.policy}', name="ZINC_full",
                                       transform=transform, pre_transform=pre_transform)
 
         # infile = open("./datasets/indices/test.index.txt", "r")

@@ -8,7 +8,7 @@ from typing import List, Callable, Optional, Union
 
 import torch
 from torch_geometric.data import Batch, Data
-from torch_geometric.utils import k_hop_subgraph, subgraph
+from torch_geometric.utils import k_hop_subgraph, subgraph, is_undirected, to_undirected
 
 from subgraph_utils import rand_sampling
 
@@ -98,6 +98,50 @@ class NodeDeleted(Graph2Subgraph):
         return subgraphs
 
 
+class EdgeDeleted(Graph2Subgraph):
+    def to_subgraphs(self, data: Data) -> List[Data]:
+        # no edge
+        if data.edge_index.shape[1] == 0:
+            return [data]
+
+        if data.edge_attr is not None and data.edge_attr.ndim == 1:
+            edge_attr = data.edge_attr.unsqueeze(-1)
+        else:
+            edge_attr = data.edge_attr
+
+        undirected = is_undirected(data.edge_index, edge_attr, data.num_nodes)
+
+        if undirected:
+            keep_edge = data.edge_index[0] <= data.edge_index[1]
+            edge_index = data.edge_index[:, keep_edge]
+            edge_attr = edge_attr[keep_edge, :] if edge_attr is not None else edge_attr
+        else:
+            edge_index = data.edge_index
+
+        subgraphs = []
+        for i in range(edge_index.shape[1]):
+            subgraph_edge_index = torch.hstack([edge_index[:, :i], edge_index[:, i + 1:]])
+            subgraph_edge_attr = torch.vstack([edge_attr[:i], edge_attr[i + 1:]]) if edge_attr is not None else None
+
+            if undirected:
+                if subgraph_edge_attr is not None:
+                    subgraph_edge_index, subgraph_edge_attr = to_undirected(subgraph_edge_index, subgraph_edge_attr,
+                                                                            num_nodes=data.num_nodes)
+                else:
+                    subgraph_edge_index = to_undirected(subgraph_edge_index, subgraph_edge_attr,
+                                                        num_nodes=data.num_nodes)
+
+            subgraphs.append(Data(
+                    x=data.x,
+                    edge_index=subgraph_edge_index,
+                    edge_attr=subgraph_edge_attr,
+                    num_nodes=data.num_nodes,
+                    y=data.y,
+                ))
+
+        return subgraphs
+
+
 def policy2transform(policy: str, process_subgraphs: Callable = None) -> Optional[Graph2Subgraph]:
     """
     Pre-transform for datasets
@@ -109,6 +153,8 @@ def policy2transform(policy: str, process_subgraphs: Callable = None) -> Optiona
     """
     if policy == "node_deleted":
         return NodeDeleted(process_subgraphs=process_subgraphs)
+    elif policy == 'edge_deleted':
+        return EdgeDeleted(process_subgraphs=process_subgraphs)
     elif policy == 'null':
         return None
     else:

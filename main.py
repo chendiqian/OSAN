@@ -38,7 +38,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--beta', type=float, default=10.)
 
     # ESAN
-    parser.add_argument('--policy', type=str, default='null', choices=['null', 'node_deleted'])
+    parser.add_argument('--policy', type=str, default='null', choices=['null', 'node_deleted', 'edge_deleted'])
     parser.add_argument('--sample_mode', type=str, default='int', choices=['float', 'int'], help="Only for baselines "
                                                                                                  "e.g. ESAN sampling, "
                                                                                                  "choose subgraphs by "

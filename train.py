@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import Union, Tuple
 from collections import defaultdict
 import itertools
 import pickle
@@ -11,13 +11,12 @@ from torch_geometric.data import Batch
 
 from models import NetGINE, NetGCN
 from data.custom_dataloader import MYDataLoader
-from subgraph_utils import edgemasked_graphs_from_nodemask, construct_subgraph_batch
+from subgraph_utils import edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask, construct_subgraph_batch
 
 from imle.wrapper import imle
 from imle.target import TargetDistribution
 from imle.noise import SumOfGammaNoiseDistribution
-
-DATASET_MEAN_NUM_NODE_DICT = {'zinc': 23.1514}
+from data.const import DATASET_NODE_EDGE_STAT_DICT
 
 Optimizer = Union[torch.optim.Adam,
                   torch.optim.SGD]
@@ -25,6 +24,10 @@ Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau]
 Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
+
+
+def get_split_idx(inc_tensor: torch.Tensor) -> Tuple:
+    return tuple((inc_tensor[1:] - inc_tensor[:-1]).detach().cpu().tolist())
 
 
 def make_get_batch_topk(ptr, sample_k, return_list, sample):
@@ -64,7 +67,8 @@ def make_get_batch_topk(ptr, sample_k, return_list, sample):
 class Trainer:
     def __init__(self,
                  task_type: str,
-                 sample_node_k: int,
+                 imle_sample_policy: str,
+                 sample_k: int,
                  voting: int,
                  max_patience: int,
                  optimizer: Optimizer,
@@ -76,7 +80,8 @@ class Trainer:
         """
 
         :param task_type:
-        :param sample_node_k:
+        :param imle_sample_policy:
+        :param sample_k: sample nodes or edges
         :param voting:
         :param max_patience:
         :param optimizer:
@@ -91,7 +96,8 @@ class Trainer:
         assert task_type == 'regression', "Does not support tasks other than regression"
         self.task_type = task_type
         self.voting = voting
-        self.sample_node_k = sample_node_k
+        self.imle_sample_policy = imle_sample_policy
+        self.sample_k = sample_k
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.criterion = criterion
@@ -104,11 +110,14 @@ class Trainer:
         self.curves = defaultdict(list)
 
         if train_embd_model:
-            self.temp = float(sample_node_k if sample_node_k > 0 else DATASET_MEAN_NUM_NODE_DICT['zinc'] + sample_node_k)
+            self.temp = float(sample_k if sample_k > 0 else
+                              DATASET_NODE_EDGE_STAT_DICT['zinc'][self.imle_sample_policy] + sample_k)
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
             self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
                                                                   nb_iterations=100,
                                                                   device=device)
+            self.imle_graphs_from_masks = edgemasked_graphs_from_nodemask if self.imle_sample_policy == 'node'\
+                else edgemasked_graphs_from_edgemask
 
     def train(self,
               dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
@@ -126,9 +135,11 @@ class Trainer:
             self.optimizer.zero_grad()
 
             if emb_model is not None:
-                split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
+                split_idx = get_split_idx(data.ptr if self.imle_sample_policy == 'node' else
+                                          data._slice_dict['edge_index'])
                 logits = emb_model(data)
-                torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_node_k, return_list=False, sample=False)
+                torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_k, return_list=False,
+                                                           sample=False)
 
                 @imle(target_distribution=self.target_distribution,
                       noise_distribution=self.noise_distribution,
@@ -138,16 +149,16 @@ class Trainer:
                 def imle_get_batch_topk(logits: torch.Tensor):
                     return torch_get_batch_topk(logits)
 
-                sample_node_idx = imle_get_batch_topk(logits)
+                sample_idx = imle_get_batch_topk(logits)
                 # each mask has shape (n_nodes, n_subgraphs)
-                sample_node_idx = torch.split(sample_node_idx, split_idx)
+                sample_idx = torch.split(sample_idx, split_idx)
                 # original graphs
                 graphs = Batch.to_data_list(data)
                 list_subgraphs, edge_weights = zip(
-                    *[edgemasked_graphs_from_nodemask(g, i.T, grad=True) for g, i in
-                      zip(graphs, sample_node_idx)])
+                    *[self.imle_graphs_from_masks(g, i.T, grad=True) for g, i in
+                      zip(graphs, sample_idx)])
                 list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
-                data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights,
+                data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_idx], edge_weights,
                                                 self.device)
 
             pred = model(data)
@@ -166,7 +177,7 @@ class Trainer:
     def validation(self,
                    dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
                    emb_model: Emb_model,
-                   model: Train_model,):
+                   model: Train_model, ):
         if emb_model is not None:
             emb_model.eval()
         model.eval()
@@ -178,12 +189,14 @@ class Trainer:
                 data = data.to(self.device)
 
                 if emb_model is not None:
-                    split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
+                    split_idx = get_split_idx(data.ptr if self.imle_sample_policy == 'node' else
+                                              data._slice_dict['edge_index'])
                     logits = emb_model(data)
-                    torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_node_k, return_list=True, sample=True)
+                    torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_k, return_list=True,
+                                                               sample=True)
                     sample_node_idx = torch_get_batch_topk(logits)
                     graphs = Batch.to_data_list(data)
-                    list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in
+                    list_subgraphs, edge_weights = zip(*[self.imle_graphs_from_masks(g, i.T, grad=False) for g, i in
                                                          zip(graphs, sample_node_idx)])
                     list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
 

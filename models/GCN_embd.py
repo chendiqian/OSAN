@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.nn import global_mean_pool, MessagePassing
+from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import degree
 
 
@@ -33,8 +33,11 @@ class GCNConv(MessagePassing):
 
 
 class NetGCN(torch.nn.Module):
-    def __init__(self, input_dim, edge_features, hid_dim, emb_dim):
+    def __init__(self, input_dim, edge_features, hid_dim, emb_dim, sample_policy):
         super(NetGCN, self).__init__()
+        assert sample_policy in ['edge', 'node']
+        self.sample_policy = sample_policy
+
         self.conv1 = GCNConv(edge_features, input_dim, hid_dim)
         self.bn1 = torch.nn.BatchNorm1d(hid_dim)
 
@@ -55,5 +58,11 @@ class NetGCN(torch.nn.Module):
         x = self.bn2(x)
         x = torch.relu(self.conv3(x, data.edge_index, data.edge_attr))
         x = self.bn3(x)
+        x = self.lin(x)
 
-        return self.lin(x)
+        if self.sample_policy == 'node':
+            return x
+        elif self.sample_policy == 'edge':
+            return x[data.edge_index[0], :] * x[data.edge_index[1], :]
+        else:
+            raise NotImplementedError

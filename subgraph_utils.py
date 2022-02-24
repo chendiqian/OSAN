@@ -127,6 +127,20 @@ def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True) -> Tu
     return graphs, edge_weights
 
 
+def edgemasked_graphs_from_edgemask(graph: Data, masks: Tensor, grad=True) -> Tuple[List[Data], Tensor]:
+    """
+    Create edge_weights which contain the back-propagated gradients
+
+    :param graph:
+    :param masks: shape (n_subgraphs, n_edge_in_original_graph,) edge masks
+    :param grad: whether to contain gradient info
+    :return:
+    """
+    edge_weights = masks.reshape(-1)
+    graphs = [graph] * masks.shape[0]
+    return graphs, edge_weights
+
+
 def get_ptr(graph_idx: Tensor, device: torch.device) -> Tensor:
     """
     Given indices of graph, return ptr

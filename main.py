@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models import NetGINE, NetGCN
 from train import Trainer
 from data.get_data import get_data
+from data.const import DATASET_FEATURE_STAT_DICT
 
 
 def get_parse() -> Namespace:
@@ -32,7 +33,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--save_freq', type=int, default=100)
 
     # I-MLE
-    parser.add_argument('--sample_policy', type=str, choices=['node', 'edge'])
+    parser.add_argument('--sample_policy', type=str, default='node', choices=['node', 'edge'])
     parser.add_argument('--sample_edge_k', type=int, default=-1, help='number of edges sampled')
     parser.add_argument('--sample_node_k', type=int, default=-1, help='top-k nodes, i.e. n_nodes of each subgraph')
     parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
@@ -116,20 +117,30 @@ if __name__ == '__main__':
     logger.info(f'Using device: {device}')
 
     if args.model.lower() == 'gine':
-        model = NetGINE(28, 3, args.hid_size, args.dropout, args.num_convlayers, jk=args.gnn_jk).to(device)
+        model = NetGINE(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                        DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                        args.hid_size,
+                        args.dropout,
+                        args.num_convlayers,
+                        jk=args.gnn_jk).to(device)
     else:
         raise NotImplementedError
 
     if args.train_embd_model:
-        emb_model = NetGCN(28, 3, args.hid_size, args.num_subgraphs).to(device)
+        emb_model = NetGCN(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                           DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                           args.hid_size,
+                           args.num_subgraphs,
+                           args.sample_policy).to(device)
         train_params = list(emb_model.parameters()) + list(model.parameters())
     else:
         emb_model = None
         train_params = model.parameters()
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
-    trainer = Trainer(task_type="regression",
-                      sample_node_k=args.sample_node_k,
+    trainer = Trainer(task_type=task_type,
+                      imle_sample_policy=args.sample_policy,
+                      sample_k=args.sample_node_k if args.sample_policy == 'node' else args.sample_edge_k,
                       voting=args.voting,
                       max_patience=args.patience,
                       optimizer=optimizer,

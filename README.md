@@ -1,9 +1,11 @@
 # I-MLE sampling
-Specify `--sample_node_k` `--num_subgraphs`, especially `--train_embd_model` hparams. `--sample_node_k` can be positive integers as number of nodes per subgraph or negative number as node deletion. 
+Specify `--sample_policy` as well as `--sample_node_k` (`--sample_edge_k`) and `--num_subgraphs`, especially `--train_embd_model` hparams. `--sample_node_k` (`--sample_edge_k`) can be positive integers as number of nodes (edges) per subgraph or negative number as node (edge) deletion. 
 
 e.g.
 
-`python main.py --batch_size 128 --epochs 1000 --sample_node_k -1 --num_subgraphs 3 --train_embd_model`
+Node sample: `python main.py --batch_size 128 --epochs 1000 --sample_policy node --sample_node_k -1 --num_subgraphs 3 --train_embd_model`
+
+Edge sample: `python main.py --batch_size 128 --epochs 1000 --sample_policy edge --sample_edge_k -1 --num_subgraphs 3 --train_embd_model`
 
 # ESAN
 Specify `--esan_policy` as `node_deletion` or else. `--sample_mode` is to sample from the _deck_ of subgraph set with ratio or fixed number of subgraphs. `--esan_frac` is the ratio, `--esan_k` is the fixed number, depending on `--sample_mode`. `--voting` is for inference as [here](https://github.com/beabevi/ESAN/blob/98b6c346e8bca77db1597f88bac78178871e652c/main.py#L121), but can be used for other settings as well. 
@@ -18,7 +20,7 @@ Edge delete: `python main.py --batch_size 128 --epochs 1000 --esan_policy edge_d
 
 No subgraph thing. Take a normal batch from the dataset and train it. 
 
-__Remember__ to set `--num_subgraphs 0`
+__Remember__ to set `--num_subgraphs 0` and leave `--train_embd_model` false.
 
 e.g.
 

@@ -34,19 +34,18 @@ class GINEConv(MessagePassing):
 
 
 class NetGINE(torch.nn.Module):
-    def __init__(self, dim, dropout, num_convlayers, use_bias=True, jk=None):
+    def __init__(self, input_dims, edge_features, dim, dropout, num_convlayers, use_bias=True, jk=None):
         super(NetGINE, self).__init__()
 
         self.dropout = dropout
         self.jk = jk
-        num_features = 3
         assert num_convlayers > 1
 
-        self.conv = torch.nn.ModuleList([GINEConv(num_features, 28, dim, use_bias)])
+        self.conv = torch.nn.ModuleList([GINEConv(edge_features, input_dims, dim, use_bias)])
         self.bn = torch.nn.ModuleList([torch.nn.BatchNorm1d(dim)])
 
         for _ in range(num_convlayers - 1):
-            self.conv.append(GINEConv(num_features, dim, dim, use_bias))
+            self.conv.append(GINEConv(edge_features, dim, dim, use_bias))
             self.bn.append(torch.nn.BatchNorm1d(dim))
 
         if self.jk == 'concat':

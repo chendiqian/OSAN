@@ -33,16 +33,15 @@ class GCNConv(MessagePassing):
 
 
 class NetGCN(torch.nn.Module):
-    def __init__(self, input_dim, hid_dim, emb_dim):
+    def __init__(self, input_dim, edge_features, hid_dim, emb_dim):
         super(NetGCN, self).__init__()
-        num_features = 3
-        self.conv1 = GCNConv(num_features, input_dim, hid_dim)
+        self.conv1 = GCNConv(edge_features, input_dim, hid_dim)
         self.bn1 = torch.nn.BatchNorm1d(hid_dim)
 
-        self.conv2 = GCNConv(num_features, hid_dim, hid_dim)
+        self.conv2 = GCNConv(edge_features, hid_dim, hid_dim)
         self.bn2 = torch.nn.BatchNorm1d(hid_dim)
 
-        self.conv3 = GCNConv(num_features, hid_dim, hid_dim)
+        self.conv3 = GCNConv(edge_features, hid_dim, hid_dim)
         self.bn3 = torch.nn.BatchNorm1d(hid_dim)
 
         self.lin = torch.nn.Linear(hid_dim, emb_dim)

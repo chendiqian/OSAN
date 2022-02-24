@@ -8,72 +8,7 @@ from torch.utils.data.dataloader import default_collate
 from torch_geometric.loader.dataloader import Collater
 from torch_geometric.data import Batch, Data, Dataset, HeteroData
 
-from subgraph_utils import rand_sampling, construct_subgraph_batch
-
-
-# class Collater:
-#     def __init__(self, follow_batch, exclude_keys):
-#         self.follow_batch = follow_batch
-#         self.exclude_keys = exclude_keys
-#
-#     def __call__(self, batch):
-#         elem = batch[0]
-#         if isinstance(elem, (Data, HeteroData)):
-#             return Batch.from_data_list(batch, self.follow_batch,
-#                                         self.exclude_keys)
-#         elif isinstance(elem, torch.Tensor):
-#             return default_collate(batch)
-#         elif isinstance(elem, float):
-#             return torch.tensor(batch, dtype=torch.float)
-#         elif isinstance(elem, int):
-#             return torch.tensor(batch)
-#         elif isinstance(elem, str):
-#             return batch
-#         elif isinstance(elem, Mapping):
-#             return {key: self([data[key] for data in batch]) for key in elem}
-#         elif isinstance(elem, tuple) and hasattr(elem, '_fields'):
-#             return type(elem)(*(self(s) for s in zip(*batch)))
-#         elif isinstance(elem, Sequence) and not isinstance(elem, str):
-#             return [self(s) for s in zip(*batch)]
-#
-#         raise TypeError(f'DataLoader found invalid type: {type(elem)}')
-#
-#     def collate(self, batch):  # Deprecated...
-#         return self(batch)
-
-
-# class SampleCollater:
-#     """
-#     Customized data collator
-#     Return batches with randomly sampled subgraphs
-#     e.g.
-#     Given a batch of graphs [g1, g2, g3 ...] from the dataset
-#     Returns augmented batch of [g1_1, g1_2, g1_3, g2_1, g2_2, g2_3, ...]
-#
-#     Requires no pre_transform for the dataset
-#
-#     Drawback: can get same subgraphs of an original graph
-#
-#     """
-#
-#     def __init__(self,
-#                  n_subgraphs: int = 0,
-#                  node_per_subgraph: int = -1,
-#                  follow_batch: Optional[List[str]] = None,
-#                  exclude_keys: Optional[List[str]] = None):
-#         self.n_subgraphs = n_subgraphs
-#         self.node_per_subgraph = node_per_subgraph
-#         assert follow_batch is None and exclude_keys is None, "Not supported"
-#         self.follow_batch = follow_batch
-#         self.exclude_keys = exclude_keys
-#
-#     def __call__(self, batch: List[Data]):
-#         graph_list = []
-#         for i, g in enumerate(batch):
-#             subgraphs, _ = rand_sampling(g, self.n_subgraphs, self.node_per_subgraph)
-#             graph_list += subgraphs
-#
-#         return construct_subgraph_batch(graph_list, [self.n_subgraphs] * len(batch), None, batch[0].x.device)
+from subgraph_utils import construct_subgraph_batch
 
 
 class SubgraphSetCollator:

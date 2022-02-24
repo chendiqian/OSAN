@@ -1,32 +1,17 @@
 from typing import List, Optional, Union, Tuple, Sequence
-from collections import namedtuple
 
 import torch
-from torch import Tensor
-from torch_geometric.data import Batch, Data, Dataset, HeteroData
-from torch_geometric.utils import subgraph
+from torch import Tensor, LongTensor
+from torch_geometric.data import Batch, Data
+from torch_geometric.utils import subgraph, is_undirected, to_undirected
 
 from grad_utils import Nodemask2Edgemask, nodemask2edgemask
 from data import SubgraphSetBatch
 
 
-def get_ptr(graph_idx: Tensor, device: torch.device) -> Tensor:
-    """
-    Given indices of graph, return ptr
-    e.g. [1,1,2,2,2,3,3,4] -> [0, 2, 5, 7]
-
-    :param graph_idx:
-    :param device:
-    :return:
-    """
-    return torch.cat((torch.tensor([0], device=device),
-                      (graph_idx[1:] > graph_idx[:-1]).nonzero().reshape(-1) + 1,
-                      torch.tensor([len(graph_idx)], device=device)), dim=0)
-
-
-def rand_sampling(graph: Data,
-                  n_subgraphs: int,
-                  node_per_subgraph: int = -1) -> Tuple[List[Data], int]:
+def node_rand_sampling(graph: Data,
+                       n_subgraphs: int,
+                       node_per_subgraph: int = -1) -> List[Data]:
     """
     Sample subgraphs.
     TODO: replace for-loop with functorch.vmap https://pytorch.org/tutorials/prototype/vmap_recipe.html?highlight=vmap
@@ -43,68 +28,87 @@ def rand_sampling(graph: Data,
     if node_per_subgraph < 0:  # drop nodes
         node_per_subgraph += n_nodes
 
-    batch_num_nodes = 0
-    idx_list = []
+    graphs = []
     for i in range(n_subgraphs):
         indices = torch.randperm(n_nodes)[:node_per_subgraph]
         sort_indices = torch.sort(indices).values
-        batch_num_nodes += len(indices)
-        idx_list.append(sort_indices)
-
-    res_list = subgraphs_from_index(graph, idx_list)
-    return res_list, batch_num_nodes
-
-
-def subgraphs_from_index(graph: Data, indices: Union[Tensor, List[Tensor]]) -> List[Data]:
-    """
-    Given a graph and a tensor whose rows are indices (The indices are sorted)
-    Returns a list of subgraphs indicated by the indices
-
-    :param graph:
-    :param indices:
-    :return:
-    """
-    if isinstance(indices, Tensor) and indices.ndim < 2:
-        indices = indices[None]
-
-    graphs = []
-    for idx in indices:
-        edge_index, edge_attr = subgraph(idx, graph.edge_index, graph.edge_attr, relabel_nodes=False)
-        graphs.append(Data(x=graph.x,
-                           edge_index=edge_index,
-                           edge_attr=edge_attr,
-                           y=graph.y))
+        graphs.append(nodesubset_to_subgraph(graph, sort_indices, relabel=False))
 
     return graphs
 
 
-def subgraphs_from_mask(graph: Data, masks: Tensor) -> List[Data]:
-    """
-    Return subgraphs containing gradients of mask
+def edge_rand_sampling(graph: Data, n_subgraphs: int, edge_per_subgraph: int = -1) -> List[Data]:
+    n_edge = graph.num_edges
+    if n_edge == 0:
+        return [graph for _ in range(n_subgraphs)]
 
-    :param graph:
-    :param masks: shape(n_Subgraphs, n_nodes)
-    :return:
-    """
-    assert masks.dtype == torch.float
-    if masks.ndim < 2:
-        masks = masks[None]
+    if edge_per_subgraph < 0:   # drop edges
+        edge_per_subgraph += n_edge
 
-    edge_masks = masks[:, graph.edge_index[0]] * masks[:, graph.edge_index[1]]
-    idx_masks = masks.detach().to(torch.bool)
+    edge_index, edge_attr, undirected = edge_sample_preproc(graph)
 
     graphs = []
-    for i, (m, id_m, em) in enumerate(zip(masks, idx_masks, edge_masks)):
-        # relabel edge_index
-        edge_attr = graph.edge_attr * em[:, None]
-        edge_index, edge_attr = subgraph(id_m, graph.edge_index, edge_attr, relabel_nodes=True)
-        # multiply the mask then slice to obtain the gradient
-        graphs.append(Data(x=(graph.x * m[:, None])[id_m, :],
-                           edge_index=edge_index,
-                           edge_attr=edge_attr,
-                           y=graph.y))
+    for i in range(n_subgraphs):
+        indices = torch.randperm(n_edge)[:edge_per_subgraph]
+        sort_indices = torch.sort(indices).values
+
+        subgraph_edge_index = edge_index[:, sort_indices]
+        subgraph_edge_attr = edge_attr[sort_indices, :] if edge_attr is not None else None
+
+        if undirected:
+            if subgraph_edge_attr is not None:
+                subgraph_edge_index, subgraph_edge_attr = to_undirected(subgraph_edge_index, subgraph_edge_attr,
+                                                                        num_nodes=graph.num_nodes)
+            else:
+                subgraph_edge_index = to_undirected(subgraph_edge_index, subgraph_edge_attr,
+                                                    num_nodes=graph.num_nodes)
+
+        graphs.append(Data(
+                    x=graph.x,
+                    edge_index=subgraph_edge_index,
+                    edge_attr=subgraph_edge_attr,
+                    num_nodes=graph.num_nodes,
+                    y=graph.y,
+                ))
 
     return graphs
+
+
+def edge_sample_preproc(data: Data) -> Tuple[LongTensor, Tensor, bool]:
+    """
+    If undirected, return the non-duplicate directed edges for sampling
+
+    :param data:
+    :return:
+    """
+    if data.edge_attr is not None and data.edge_attr.ndim == 1:
+        edge_attr = data.edge_attr.unsqueeze(-1)
+    else:
+        edge_attr = data.edge_attr
+
+    undirected = is_undirected(data.edge_index, edge_attr, data.num_nodes)
+
+    if undirected:
+        keep_edge = data.edge_index[0] <= data.edge_index[1]
+        edge_index = data.edge_index[:, keep_edge]
+        edge_attr = edge_attr[keep_edge, :] if edge_attr is not None else edge_attr
+    else:
+        edge_index = data.edge_index
+
+    return edge_index, edge_attr, undirected
+
+
+def nodesubset_to_subgraph(graph: Data, subset: Tensor, relabel=False) -> Data:
+    edge_index, edge_attr = subgraph(subset, graph.edge_index, graph.edge_attr,
+                                     relabel_nodes=relabel, num_nodes=graph.num_nodes)
+
+    x = graph.x[subset] if relabel else graph.x
+    num_nodes = subset.numel() if relabel else graph.num_nodes
+    return Data(x=x,
+                edge_index=edge_index,
+                edge_attr=edge_attr,
+                num_nodes=num_nodes,
+                y=graph.y)
 
 
 def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True) -> Tuple[List[Data], Tensor]:
@@ -121,6 +125,20 @@ def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True) -> Tu
     edge_weights = edge_weights.reshape(-1)
     graphs = [graph] * masks.shape[0]
     return graphs, edge_weights
+
+
+def get_ptr(graph_idx: Tensor, device: torch.device) -> Tensor:
+    """
+    Given indices of graph, return ptr
+    e.g. [1,1,2,2,2,3,3,4] -> [0, 2, 5, 7]
+
+    :param graph_idx:
+    :param device:
+    :return:
+    """
+    return torch.cat((torch.tensor([0], device=device),
+                      (graph_idx[1:] > graph_idx[:-1]).nonzero().reshape(-1) + 1,
+                      torch.tensor([len(graph_idx)], device=device)), dim=0)
 
 
 def construct_subgraph_batch(graph_list: List[Data],

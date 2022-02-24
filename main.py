@@ -32,13 +32,15 @@ def get_parse() -> Namespace:
     parser.add_argument('--save_freq', type=int, default=100)
 
     # I-MLE
-    parser.add_argument('--sample_k', type=int, default=30, help='top-k nodes, i.e. n_nodes of each subgraph')
+    parser.add_argument('--sample_policy', type=str, choices=['node', 'edge'])
+    parser.add_argument('--sample_edge_k', type=int, default=-1, help='number of edges sampled')
+    parser.add_argument('--sample_node_k', type=int, default=-1, help='top-k nodes, i.e. n_nodes of each subgraph')
     parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
     parser.add_argument('--beta', type=float, default=10.)
 
     # ESAN
-    parser.add_argument('--policy', type=str, default='null', choices=['null', 'node_deleted', 'edge_deleted'])
+    parser.add_argument('--esan_policy', type=str, default='null', choices=['null', 'node_deleted', 'edge_deleted'])
     parser.add_argument('--sample_mode', type=str, default='int', choices=['float', 'int'], help="Only for baselines "
                                                                                                  "e.g. ESAN sampling, "
                                                                                                  "choose subgraphs by "
@@ -73,12 +75,16 @@ def naming(args: Namespace) -> str:
            f'bsize_{args.batch_size}_' \
            f'jk_{args.gnn_jk}_'
 
-    if args.policy == 'null':
-        name += f'knodes_{args.sample_k}_' \
-                f'n_subg_{args.num_subgraphs}_' \
-                f'IMLE_{args.train_embd_model}_'
+    if args.esan_policy == 'null':
+        if args.num_subgraphs == 0:
+            name += 'normal_train_'
+        else:
+            name += f'policy_{args.sample_policy}_' \
+                    f'samplek_{args.sample_node_k if args.sample_policy == "node" else args.sample_edge_k}' \
+                    f'n_subg_{args.num_subgraphs}_' \
+                    f'IMLE_{args.train_embd_model}_'
     else:
-        name += f'policy_{args.policy}_' \
+        name += f'esanpolicy_{args.esan_policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
 
     return name + f'voting_{args.voting}'
@@ -87,7 +93,7 @@ def naming(args: Namespace) -> str:
 if __name__ == '__main__':
     args = get_parse()
 
-    assert ((not args.train_embd_model) or (args.policy == 'null')), "Not support sampling the original data with I-MLE"
+    assert ((not args.train_embd_model) or (args.esan_policy == 'null')), "No sampling the original data with I-MLE"
     train_loader, val_loader, test_loader = get_data(args)
 
     if args.dataset.lower() in ['zinc']:
@@ -110,12 +116,12 @@ if __name__ == '__main__':
     logger.info(f'Using device: {device}')
 
     if args.model.lower() == 'gine':
-        model = NetGINE(args.hid_size, args.dropout, args.num_convlayers, jk=args.gnn_jk).to(device)
+        model = NetGINE(28, 3, args.hid_size, args.dropout, args.num_convlayers, jk=args.gnn_jk).to(device)
     else:
         raise NotImplementedError
 
     if args.train_embd_model:
-        emb_model = NetGCN(28, args.hid_size, args.num_subgraphs).to(device)
+        emb_model = NetGCN(28, 3, args.hid_size, args.num_subgraphs).to(device)
         train_params = list(emb_model.parameters()) + list(model.parameters())
     else:
         emb_model = None
@@ -123,7 +129,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     trainer = Trainer(task_type="regression",
-                      sample_k=args.sample_k,
+                      sample_node_k=args.sample_node_k,
                       voting=args.voting,
                       max_patience=args.patience,
                       optimizer=optimizer,

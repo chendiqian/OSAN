@@ -5,7 +5,7 @@ from argparse import Namespace
 from torch_geometric.datasets import TUDataset
 
 from data.custom_dataloader import MYDataLoader
-from data.subgraph_policy import policy2transform, DeckSampler, RawSampler
+from data.subgraph_policy import policy2transform, DeckSampler, RawNodeSampler, RawEdgeSampler
 from data.custom_datasets import CustomTUDataset
 
 
@@ -20,16 +20,19 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
         if not os.path.isdir(args.data_path):
             os.mkdir(args.data_path)
 
-        pre_transform = policy2transform(args.policy)
+        pre_transform = policy2transform(args.esan_policy)
 
         if pre_transform is None:   # I-MLE, or normal training, or sample on the fly
             transform = None
             if (not args.train_embd_model) and (args.num_subgraphs > 0):   # sample-on-the-fly
-                transform = RawSampler(args.num_subgraphs, args.sample_k)
+                if args.sample_policy == 'node':
+                    transform = RawNodeSampler(args.num_subgraphs, args.sample_node_k)
+                elif args.sample_policy == 'edge':
+                    transform = RawEdgeSampler(args.num_subgraphs, args.sample_edge_k)
             dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full")
         else:   # ESAN: sample from the deck
             transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)
-            dataset = CustomTUDataset(args.data_path + f'/deck/{args.policy}', name="ZINC_full",
+            dataset = CustomTUDataset(args.data_path + f'/deck/{args.esan_policy}', name="ZINC_full",
                                       transform=transform, pre_transform=pre_transform)
 
         # infile = open("./datasets/indices/test.index.txt", "r")

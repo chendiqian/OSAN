@@ -8,25 +8,37 @@ from typing import List, Callable, Optional, Union
 
 import torch
 from torch_geometric.data import Batch, Data
-from torch_geometric.utils import k_hop_subgraph, subgraph, is_undirected, to_undirected
+from torch_geometric.utils import to_undirected
 
-from subgraph_utils import rand_sampling
+from subgraph_utils import node_rand_sampling, edge_rand_sampling, nodesubset_to_subgraph, edge_sample_preproc
 
 
-class RawSampler:
-    def __init__(self, n_subgraphs: int, node_per_subgraph: int):
+class SamplerOnTheFly:
+    def __init__(self, n_subgraphs: int = 1, sample_k: Optional[int] = None):
         """
         Sample from a single graph, to create a batch of subgraphs.
         Especially suitable for situations where the deck is too large and inefficient.
 
         :param n_subgraphs:
-        :param node_per_subgraph:
+        :param sample_k: nodes / edges per subgraphs
         """
+        super(SamplerOnTheFly, self).__init__()
         self.n_subgraphs = n_subgraphs
-        self.node_per_subgraph = node_per_subgraph
+        self.sample_k = sample_k
 
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class RawNodeSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs, _ = rand_sampling(data, self.n_subgraphs, self.node_per_subgraph)
+        subgraphs = node_rand_sampling(data, self.n_subgraphs, self.sample_k)
+        return subgraphs
+
+
+class RawEdgeSampler(SamplerOnTheFly):
+    def __call__(self, data: Union[Data, Batch]) -> List[Data]:
+        subgraphs = edge_rand_sampling(data, self.n_subgraphs, self.sample_k)
         return subgraphs
 
 
@@ -83,18 +95,7 @@ class NodeDeleted(Graph2Subgraph):
 
         for i in range(data.num_nodes):
             subset = torch.cat([all_nodes[:i], all_nodes[i + 1:]])
-            subgraph_edge_index, subgraph_edge_attr = subgraph(subset, data.edge_index, data.edge_attr,
-                                                               relabel_nodes=False, num_nodes=data.num_nodes)
-
-            subgraphs.append(
-                Data(
-                    x=data.x,
-                    edge_index=subgraph_edge_index,
-                    edge_attr=subgraph_edge_attr,
-                    num_nodes=data.num_nodes,
-                    y=data.y,
-                )
-            )
+            subgraphs.append(nodesubset_to_subgraph(data, subset, relabel=False))
         return subgraphs
 
 
@@ -104,19 +105,7 @@ class EdgeDeleted(Graph2Subgraph):
         if data.edge_index.shape[1] == 0:
             return [data]
 
-        if data.edge_attr is not None and data.edge_attr.ndim == 1:
-            edge_attr = data.edge_attr.unsqueeze(-1)
-        else:
-            edge_attr = data.edge_attr
-
-        undirected = is_undirected(data.edge_index, edge_attr, data.num_nodes)
-
-        if undirected:
-            keep_edge = data.edge_index[0] <= data.edge_index[1]
-            edge_index = data.edge_index[:, keep_edge]
-            edge_attr = edge_attr[keep_edge, :] if edge_attr is not None else edge_attr
-        else:
-            edge_index = data.edge_index
+        edge_index, edge_attr, undirected = edge_sample_preproc(data)
 
         subgraphs = []
         for i in range(edge_index.shape[1]):

@@ -64,7 +64,7 @@ def make_get_batch_topk(ptr, sample_k, return_list, sample):
 class Trainer:
     def __init__(self,
                  task_type: str,
-                 sample_k: int,
+                 sample_node_k: int,
                  voting: int,
                  max_patience: int,
                  optimizer: Optimizer,
@@ -76,7 +76,7 @@ class Trainer:
         """
 
         :param task_type:
-        :param sample_k:
+        :param sample_node_k:
         :param voting:
         :param max_patience:
         :param optimizer:
@@ -91,7 +91,7 @@ class Trainer:
         assert task_type == 'regression', "Does not support tasks other than regression"
         self.task_type = task_type
         self.voting = voting
-        self.sample_k = sample_k
+        self.sample_node_k = sample_node_k
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.criterion = criterion
@@ -104,7 +104,7 @@ class Trainer:
         self.curves = defaultdict(list)
 
         if train_embd_model:
-            self.temp = float(sample_k if sample_k > 0 else DATASET_MEAN_NUM_NODE_DICT['zinc'] + sample_k)
+            self.temp = float(sample_node_k if sample_node_k > 0 else DATASET_MEAN_NUM_NODE_DICT['zinc'] + sample_node_k)
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
             self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
                                                                   nb_iterations=100,
@@ -128,7 +128,7 @@ class Trainer:
             if emb_model is not None:
                 split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
                 logits = emb_model(data)
-                torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_k, return_list=False, sample=False)
+                torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_node_k, return_list=False, sample=False)
 
                 @imle(target_distribution=self.target_distribution,
                       noise_distribution=self.noise_distribution,
@@ -180,7 +180,7 @@ class Trainer:
                 if emb_model is not None:
                     split_idx = tuple((data.ptr[1:] - data.ptr[:-1]).detach().cpu().tolist())
                     logits = emb_model(data)
-                    torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_k, return_list=True, sample=True)
+                    torch_get_batch_topk = make_get_batch_topk(split_idx, self.sample_node_k, return_list=True, sample=True)
                     sample_node_idx = torch_get_batch_topk(logits)
                     graphs = Batch.to_data_list(data)
                     list_subgraphs, edge_weights = zip(*[edgemasked_graphs_from_nodemask(g, i.T, grad=False) for g, i in

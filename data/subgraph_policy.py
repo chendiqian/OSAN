@@ -10,7 +10,8 @@ import torch
 from torch_geometric.data import Batch, Data
 from torch_geometric.utils import to_undirected
 
-from subgraph_utils import node_rand_sampling, edge_rand_sampling, nodesubset_to_subgraph, edge_sample_preproc
+from subgraph.construct import nodesubset_to_subgraph
+from subgraph.sampling import node_rand_sampling, edge_rand_sampling, edge_sample_preproc
 
 
 class SamplerOnTheFly:

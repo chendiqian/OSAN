@@ -8,7 +8,7 @@ from torch.utils.data.dataloader import default_collate
 from torch_geometric.loader.dataloader import Collater
 from torch_geometric.data import Batch, Data, Dataset, HeteroData
 
-from subgraph_utils import construct_subgraph_batch
+from subgraph.construct import construct_subgraph_batch
 
 
 class SubgraphSetCollator:

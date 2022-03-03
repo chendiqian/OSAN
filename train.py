@@ -11,7 +11,8 @@ from torch_geometric.data import Batch
 
 from models import NetGINE, NetGCN
 from data.custom_dataloader import MYDataLoader
-from subgraph_utils import edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask, construct_subgraph_batch
+from subgraph.construct import edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask, \
+    construct_subgraph_batch
 
 from imle.wrapper import imle
 from imle.target import TargetDistribution

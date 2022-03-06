@@ -60,7 +60,7 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
 
         # use subgraph collator when sample from deck or a graph
         # either case the batch will be [[g11, g12, g13], [g21, g22, g23], ...]
-        sample_collator = (pre_transform is not None) or ((not args.train_embd_model) and (args.num_subgraphs > 0))
+        sample_collator = (args.esan_policy != 'null') or ((not args.train_embd_model) and (args.num_subgraphs > 0))
 
         train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=True,
                                     subgraph_loader=sample_collator)

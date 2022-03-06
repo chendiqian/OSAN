@@ -111,8 +111,9 @@ class Trainer:
         self.curves = defaultdict(list)
 
         if train_embd_model:
-            self.temp = float(sample_k if sample_k > 0 else
-                              DATASET_NODE_EDGE_STAT_DICT['zinc'][self.imle_sample_policy] + sample_k)
+            # self.temp = float(sample_k if sample_k > 0 else
+            #                   DATASET_NODE_EDGE_STAT_DICT['zinc'][self.imle_sample_policy] + sample_k)
+            self.temp = 1.
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
             self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
                                                                   nb_iterations=100,

@@ -132,7 +132,7 @@ class EdgeDeleted(Graph2Subgraph):
         return subgraphs
 
 
-def policy2transform(policy: str, process_subgraphs: Callable = None) -> Optional[Graph2Subgraph]:
+def policy2transform(policy: str, process_subgraphs: Callable = None) -> Union[Graph2Subgraph, Callable]:
     """
     Pre-transform for datasets
     e.g. make a deck of subgraphs for the original graph, each with size n - 1
@@ -146,6 +146,6 @@ def policy2transform(policy: str, process_subgraphs: Callable = None) -> Optiona
     elif policy == 'edge_deleted':
         return EdgeDeleted(process_subgraphs=process_subgraphs)
     elif policy == 'null':
-        return None
+        return lambda x: x
     else:
         raise ValueError("Invalid subgraph policy type")

@@ -90,7 +90,7 @@ def construct_subgraph_batch(graph_list: List[Data],
     #  need to check `batch._slice_dict` and `batch._inc_dict`
 
     return SubgraphSetBatch(x=batch.x,
-                            edge_index=batch.edge_index[torch.LongTensor([1, 0]), :],  # flip the direction of message
+                            edge_index=batch.edge_index,
                             edge_attr=batch.edge_attr,
                             edge_weight=torch.cat(edge_weights, dim=0) if isinstance(edge_weights, (list, tuple))
                             else edge_weights,

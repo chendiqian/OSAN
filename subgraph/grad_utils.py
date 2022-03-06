@@ -16,13 +16,13 @@ class Nodemask2Edgemask(torch.autograd.Function):
         """
         assert mask.dtype == torch.float  # must be differentiable
         edge_index, n_nodes = args
-        ctx.save_for_backward(mask, edge_index[0], n_nodes)
+        ctx.save_for_backward(mask, edge_index[1], n_nodes)
         return nodemask2edgemask(mask, edge_index)
 
     @staticmethod
     def backward(ctx, grad_output):
-        _, edge_index_row, n_nodes = ctx.saved_tensors
-        final_grad = scatter(grad_output, edge_index_row, dim=-1, reduce='sum', dim_size=n_nodes)
+        _, edge_index_col, n_nodes = ctx.saved_tensors
+        final_grad = scatter(grad_output, edge_index_col, dim=-1, reduce='sum', dim_size=n_nodes)
         return final_grad, None, None
 
 

@@ -3,10 +3,12 @@ from typing import Tuple, Optional, List, Dict, Mapping
 from argparse import Namespace
 
 from torch_geometric.datasets import TUDataset
+from torch_geometric.transforms import Compose
 
 from data.custom_dataloader import MYDataLoader
 from data.subgraph_policy import policy2transform, DeckSampler, RawNodeSampler, RawEdgeSampler
 from data.custom_datasets import CustomTUDataset
+from data.data_utils import GraphToUndirected
 
 
 def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDataLoader]]:
@@ -20,16 +22,16 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
         if not os.path.isdir(args.data_path):
             os.mkdir(args.data_path)
 
-        pre_transform = policy2transform(args.esan_policy)
+        pre_transform = Compose([GraphToUndirected(), policy2transform(args.esan_policy)])
 
-        if pre_transform is None:   # I-MLE, or normal training, or sample on the fly
+        if args.esan_policy == 'null':   # I-MLE, or normal training, or sample on the fly
             transform = None
             if (not args.train_embd_model) and (args.num_subgraphs > 0):   # sample-on-the-fly
                 if args.sample_policy == 'node':
                     transform = RawNodeSampler(args.num_subgraphs, args.sample_node_k)
                 elif args.sample_policy == 'edge':
                     transform = RawEdgeSampler(args.num_subgraphs, args.sample_edge_k)
-            dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full")
+            dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full", pre_transform=pre_transform)
         else:   # ESAN: sample from the deck
             transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)
             dataset = CustomTUDataset(args.data_path + f'/deck/{args.esan_policy}', name="ZINC_full",

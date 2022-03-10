@@ -1,4 +1,4 @@
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, List
 
 import torch
 from torch import Tensor
@@ -138,14 +138,14 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: in
     sort_index = torch.argsort(edge_weight[directed_mask], descending=True) if edge_weight is not None else \
         torch.arange(len(edge_index_list), device=edge_index.device)
     parts = [set(edge_index_list[sort_index[0]])]
-    edge_mask = [sort_index[:1]]
+    edge_mask_idx = [sort_index[:1]]
     node_close_list = set(edge_index_list[sort_index[0]])
 
     for idx in sort_index[1:]:
         n1, n2 = edge_index_list[idx]
         if n1 not in node_close_list and n2 not in node_close_list:  # new connected component
             parts.append({n1, n2})
-            edge_mask.append(idx[None])
+            edge_mask_idx.append(idx[None])
             node_close_list.add(n1)
             node_close_list.add(n2)
         elif n1 in node_close_list and n2 not in node_close_list:
@@ -153,14 +153,14 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: in
                 if n1 in s:
                     s.add(n2)
                     node_close_list.add(n2)
-                    edge_mask.append(idx[None])
+                    edge_mask_idx.append(idx[None])
                     break
         elif n2 in node_close_list and n1 not in node_close_list:
             for s in parts:
                 if n2 in s:
                     s.add(n1)
                     node_close_list.add(n1)
-                    edge_mask.append(idx[None])
+                    edge_mask_idx.append(idx[None])
                     break
         elif n1 in node_close_list and n2 in node_close_list:
             s_idx1, s_idx2 = 0, 0
@@ -174,14 +174,14 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: in
                 s1 = parts.pop(s_idx2)
                 s2 = parts.pop(s_idx1)
                 parts.append(s1 | s2)
-                edge_mask.append(idx[None])
+                edge_mask_idx.append(idx[None])
 
     assert len(parts) == 1  # if the original graph is a connected component, then the span tree is also a component
-    edge_mask = torch.cat(edge_mask)
-    edge_index, edge_mask = to_undirected(edge_index[:, edge_mask],
-                                          edge_mask,
-                                          num_nodes=num_nodes)
-    return edge_index, edge_mask
+    edge_mask_idx = torch.cat(edge_mask_idx)
+    edge_mask = torch.zeros(edge_index.shape[1], dtype=torch.bool, device=edge_index.device)
+    edge_mask[edge_mask_idx] = True
+    _, edge_mask = to_undirected(edge_index, edge_mask, num_nodes=num_nodes)
+    return edge_mask
 
 
 def khop_subgraphs(graph: Data,
@@ -189,7 +189,7 @@ def khop_subgraphs(graph: Data,
                    edge_weight: Optional[Tensor] = None,
                    prune_policy: str = 'mst',
                    coverage: str = 'full',
-                   n_subgraphs: int = None):
+                   n_subgraphs: int = None) -> Tensor:
     """
     For each seed node, get the k-hop neighbors first, then prune the graph as e.g. max spanning tree
 
@@ -202,28 +202,23 @@ def khop_subgraphs(graph: Data,
     :return:
     """
     n_nodes, n_edges = graph.num_nodes, graph.num_edges
-    graph_list = []
     edge_weight4grad_list = []
 
-    def add_subgraph(idx: Union[int, list, Tensor], _edge_weight: Optional[Tensor]) -> Tuple[Tensor, Union[Tensor, None]]:
+    def add_subgraph(idx: Union[int, list, Tensor], _edge_weight: Optional[Tensor]) -> Tuple[Tensor, Tensor]:
         _node_idx, _edge_index, _, edge_mask = k_hop_subgraph(idx, khop, graph.edge_index, relabel_nodes=False)
         sub_edge_weight = _edge_weight[edge_mask] if _edge_weight is not None else None
 
-        _edge_attr = graph.edge_attr[edge_mask]
         if prune_policy == 'mst':
-            _edge_index, edge_mask = kruskal_max_span_tree(_edge_index, sub_edge_weight, graph.num_nodes)
-            _edge_attr = _edge_attr[edge_mask]
+            # return the masks in edge_mask, which is a subset of full graph edges
+            sub_edge_mask = kruskal_max_span_tree(_edge_index, sub_edge_weight, graph.num_nodes)
+            edge_mask = torch.where(edge_mask)[0]
+            edge_mask = edge_mask[sub_edge_mask]
         elif prune_policy is None:
             pass
         else:
             raise NotImplementedError(f"Not supported policy: {prune_policy}")
 
-        graph_list.append(Data(x=graph.x,
-                               edge_index=_edge_index,
-                               edge_attr=_edge_attr,
-                               num_nodes=graph.num_nodes,
-                               y=graph.y))
-        edge_weight4grad = torch.zeros(_edge_index.shape[1], device=_edge_index.device, dtype=torch.float32)
+        edge_weight4grad = torch.zeros(n_edges, device=_edge_index.device, dtype=torch.float32)
         edge_weight4grad[edge_mask] = 1.0
         edge_weight4grad_list.append(edge_weight4grad)
         return _node_idx, edge_mask
@@ -237,15 +232,17 @@ def khop_subgraphs(graph: Data,
         if edge_weight is None:
             edge_weight = torch.ones(n_edges, dtype=torch.float32, device=graph.edge_index.device)
 
-        close_list = set()
+        # close_list = set()
         weight_for_sample = edge_weight.clone()
         max_val = weight_for_sample.max().abs()
 
-        while len(graph_list) < n_subgraphs or len(close_list) < n_nodes:
+        # TODO: intrinsic problem of IMLE, if sample more for some graphs, they cannot concate along dim=0
+        # while len(edge_weight4grad_list) < n_subgraphs or len(close_list) < n_nodes:
+        while len(edge_weight4grad_list) < n_subgraphs:
             idx = torch.argmax(weight_for_sample)
             idx = graph.edge_index[0, idx][None]
             node_idx, visited_edges = add_subgraph(idx, edge_weight)
-            weight_for_sample[visited_edges] -= abs(max_val)
-            close_list.update(node_idx.cpu().tolist())
+            weight_for_sample[visited_edges] -= max_val
+            # close_list.update(node_idx.cpu().tolist())
 
-    return graph_list, edge_weight4grad_list
+    return torch.vstack(edge_weight4grad_list)

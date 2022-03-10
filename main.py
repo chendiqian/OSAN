@@ -38,7 +38,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--sample_node_k', type=int, default=-1, help='top-k nodes, i.e. n_nodes of each subgraph')
     # k-hop-subgraph
     parser.add_argument('--khop', type=int, default=7)
-    parser.add_argument('--prune_policy', default='mst', choices=[None, 'mst'])
+    parser.add_argument('--prune_policy', default=None, choices=[None, 'mst'])
     parser.add_argument('--coverage', default='k_subgraph', choices=['k_subgraph'])
 
     parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')

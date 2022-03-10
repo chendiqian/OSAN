@@ -35,7 +35,6 @@ class GCNConv(MessagePassing):
 class NetGCN(torch.nn.Module):
     def __init__(self, input_dim, edge_features, hid_dim, emb_dim, sample_policy):
         super(NetGCN, self).__init__()
-        assert sample_policy in ['edge', 'node']
         self.sample_policy = sample_policy
 
         self.conv1 = GCNConv(edge_features, input_dim, hid_dim)
@@ -62,7 +61,7 @@ class NetGCN(torch.nn.Module):
 
         if self.sample_policy == 'node':
             return x
-        elif self.sample_policy == 'edge':
+        elif self.sample_policy in ['edge', 'khop_subgraph']:
             return x[data.edge_index[0], :] * x[data.edge_index[1], :]
         else:
             raise NotImplementedError

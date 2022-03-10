@@ -31,6 +31,8 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
                     transform = RawNodeSampler(args.num_subgraphs, args.sample_node_k)
                 elif args.sample_policy == 'edge':
                     transform = RawEdgeSampler(args.num_subgraphs, args.sample_edge_k)
+                else:
+                    raise NotImplementedError(f"Not support {args.sample_policy} for sample on the fly.")
             dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full", pre_transform=pre_transform)
         else:   # ESAN: sample from the deck
             transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)

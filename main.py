@@ -9,7 +9,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from models import NetGINE, NetGCN
-from train import Trainer
+from training.trainer import Trainer
 from data.get_data import get_data
 from data.const import DATASET_FEATURE_STAT_DICT
 
@@ -27,16 +27,21 @@ def get_parse() -> Namespace:
     parser.add_argument('--num_convlayers', type=int, default=4)
     parser.add_argument('--gnn_jk', type=str, default=None, choices=[None, 'concat', 'residual'])
     parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--data_path', type=str, default='./datasets')
     parser.add_argument('--log_path', type=str, default='./logs')
     parser.add_argument('--save_freq', type=int, default=100)
 
     # I-MLE
-    parser.add_argument('--sample_policy', type=str, default='node', choices=['node', 'edge'])
+    parser.add_argument('--sample_policy', type=str, default='node', choices=['node', 'edge', 'khop_subgraph'])
     parser.add_argument('--sample_edge_k', type=int, default=-1, help='number of edges sampled')
     parser.add_argument('--sample_node_k', type=int, default=-1, help='top-k nodes, i.e. n_nodes of each subgraph')
-    parser.add_argument('--num_subgraphs', type=int, default=3, help='number of subgraphs to sample for a graph')
+    # k-hop-subgraph
+    parser.add_argument('--khop', type=int, default=7)
+    parser.add_argument('--prune_policy', default='mst', choices=[None, 'mst'])
+    parser.add_argument('--coverage', default='k_subgraph', choices=['k_subgraph'])
+
+    parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
     parser.add_argument('--beta', type=float, default=10.)
 
@@ -49,11 +54,16 @@ def get_parse() -> Namespace:
                                                                                                  "k")
     parser.add_argument('--esan_frac', type=float, default=0.1, help="Only for baselines, see --sample_mode")
     parser.add_argument('--esan_k', type=int, default=3, help="Only for baselines, see --sample_mode")
-    parser.add_argument('--voting', type=int, default=5, help="Only for baselines, random sampling for majority")
+    parser.add_argument('--voting', type=int, default=5, help="Random sampling for majority")
 
     parser.add_argument('--debug', action='store_true', help='when debugging, take a small subset of the datasets')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.khop_subgraph = {'khop': args.khop,
+                          'prune_policy': args.prune_policy,
+                          'coverage': args.coverage,
+                          'num_subgraphs': args.num_subgraphs}
+    return args
 
 
 def get_logger(folder_path: str) -> Logger:
@@ -81,9 +91,11 @@ def naming(args: Namespace) -> str:
             name += 'normal_train_'
         else:
             name += f'policy_{args.sample_policy}_' \
-                    f'samplek_{args.sample_node_k if args.sample_policy == "node" else args.sample_edge_k}' \
                     f'n_subg_{args.num_subgraphs}_' \
                     f'IMLE_{args.train_embd_model}_'
+            name += f'samplek_{args.sample_node_k if args.sample_policy == "node" else args.sample_edge_k}_' \
+                if args.sample_policy in ['node', 'edge'] else \
+                f'khop{args.khop}_{args.prune_policy}_{args.coverage}_'
     else:
         name += f'esanpolicy_{args.esan_policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
@@ -141,6 +153,7 @@ if __name__ == '__main__':
     trainer = Trainer(task_type=task_type,
                       imle_sample_policy=args.sample_policy,
                       sample_k=args.sample_node_k if args.sample_policy == 'node' else args.sample_edge_k,
+                      sample_khop=args.khop_subgraph,
                       voting=args.voting,
                       max_patience=args.patience,
                       optimizer=optimizer,

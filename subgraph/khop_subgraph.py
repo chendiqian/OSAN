@@ -1,10 +1,10 @@
-from typing import Optional, Union, Tuple, List
+from typing import Optional, Union, Tuple
 
 import numpy as np
 import numba
 import torch
 from torch import Tensor
-from torch_geometric.utils import k_hop_subgraph, to_undirected
+from torch_geometric.utils import k_hop_subgraph
 from torch_geometric.data import Data
 # from networkx import maximum_spanning_tree as ntx_maximum_spanning_tree
 # from networkx import Graph as NTXGraph
@@ -126,7 +126,7 @@ from torch_geometric.data import Data
 
 
 @numba.njit(cache=True, locals={'parts': numba.int32[::1], 'edge_selected': numba.bool_[::1]})
-def numba_kruskal(sort_index: np.ndarray, edge_index_list: np.ndarray, num_nodes: int):
+def numba_kruskal(sort_index: np.ndarray, edge_index_list: np.ndarray, num_nodes: int) -> np.ndarray:
     parts = np.full(num_nodes, -1, dtype=np.int32)  # -1: unvisited
     edge_selected = np.zeros_like(sort_index, dtype=np.bool_)
     edge_selected[sort_index[0]] = True
@@ -166,7 +166,7 @@ def numba_kruskal(sort_index: np.ndarray, edge_index_list: np.ndarray, num_nodes
     return edge_selected
 
 
-def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: int):
+def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: int) -> Tensor:
     """
     My own implementation
 
@@ -176,10 +176,7 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: in
     :return:
     """
     edge_index_list = edge_index.t().cpu().numpy()
-    if edge_weight is not None:
-        sort_index = torch.argsort(edge_weight, descending=True).cpu().numpy()
-    else:
-        sort_index = np.arange(edge_index.shape[1])
+    sort_index = torch.argsort(edge_weight, descending=True).cpu().numpy()
 
     edge_mask = numba_kruskal(sort_index, edge_index_list, num_nodes)
     edge_mask = torch.from_numpy(edge_mask).to(edge_index.device)
@@ -206,33 +203,33 @@ def khop_subgraphs(graph: Data,
     n_nodes, n_edges = graph.num_nodes, graph.num_edges
     edge_weight4grad_list = []
 
-    def add_subgraph(idx: Union[int, list, Tensor], _edge_weight: Optional[Tensor]) -> Tuple[Tensor, Tensor]:
+    if edge_weight is None:
+        edge_weight = torch.ones(n_edges, dtype=torch.float32, device=graph.edge_index.device)
+
+    def add_subgraph(idx: Union[int, Tensor]) -> Tuple[Tensor, Tensor]:
         _node_idx, _edge_index, _, edge_mask = k_hop_subgraph(idx, khop, graph.edge_index, relabel_nodes=False)
-        sub_edge_weight = _edge_weight[edge_mask] if _edge_weight is not None else None
 
         if prune_policy == 'mst':
+            sub_edge_weight = edge_weight[edge_mask]
             # return the masks in edge_mask, which is a subset of full graph edges
             sub_edge_mask = kruskal_max_span_tree(_edge_index, sub_edge_weight, graph.num_nodes)
-            edge_mask = torch.where(edge_mask)[0]
-            edge_mask = edge_mask[sub_edge_mask]
+            edge_mask = torch.where(edge_mask)[0][sub_edge_mask]
+            edge_weight4grad = torch.zeros(n_edges, device=_edge_index.device, dtype=torch.float32)
+            edge_weight4grad[edge_mask] = 1.0
         elif prune_policy is None:
-            pass
+            edge_weight4grad = edge_mask.to(torch.float32)
         else:
             raise NotImplementedError(f"Not supported policy: {prune_policy}")
 
-        edge_weight4grad = torch.zeros(n_edges, device=_edge_index.device, dtype=torch.float32)
-        edge_weight4grad[edge_mask] = 1.0
         edge_weight4grad_list.append(edge_weight4grad)
         return _node_idx, edge_mask
 
     if coverage == 'full':  # sample for each seed node
         for i in range(n_nodes):
-            _ = add_subgraph(i, edge_weight)
+            _ = add_subgraph(i)
 
     elif coverage == 'k_subgraph':  # sample at least k subgraphs so that the whole graph is covered
         assert n_subgraphs is not None
-        if edge_weight is None:
-            edge_weight = torch.ones(n_edges, dtype=torch.float32, device=graph.edge_index.device)
 
         # close_list = set()
         weight_for_sample = edge_weight.clone()
@@ -243,7 +240,7 @@ def khop_subgraphs(graph: Data,
         while len(edge_weight4grad_list) < n_subgraphs:
             idx = torch.argmax(weight_for_sample)
             idx = graph.edge_index[0, idx][None]
-            node_idx, visited_edges = add_subgraph(idx, edge_weight)
+            node_idx, visited_edges = add_subgraph(idx)
             weight_for_sample[visited_edges] -= max_val
             # close_list.update(node_idx.cpu().tolist())
 

@@ -1,5 +1,7 @@
 from typing import Optional, Union, Tuple, List
 
+import numpy as np
+import numba
 import torch
 from torch import Tensor
 from torch_geometric.utils import k_hop_subgraph, to_undirected
@@ -123,6 +125,47 @@ from torch_geometric.data import Data
 #     return edge_index
 
 
+@numba.njit(cache=True, locals={'parts': numba.int32[::1], 'edge_selected': numba.bool_[::1]})
+def numba_kruskal(sort_index: np.ndarray, edge_index_list: np.ndarray, num_nodes: int):
+    parts = np.full(num_nodes, -1, dtype=np.int32)  # -1: unvisited
+    edge_selected = np.zeros_like(sort_index, dtype=np.bool_)
+    edge_selected[sort_index[0]] = True
+    n1, n2 = edge_index_list[sort_index[0]]
+    parts[n1] = 0
+    parts[n2] = 0
+
+    edge_selected_set = {(n1, n2,)}
+
+    parts_hash = 1
+
+    for idx in sort_index[1:]:
+        n1, n2 = edge_index_list[idx]
+        if (n2, n1) in edge_selected_set:
+            edge_selected[idx] = True
+            continue
+
+        if parts[n1] == -1 and parts[n2] == -1:
+            parts[n1] = parts_hash
+            parts[n2] = parts_hash
+            parts_hash += 1
+            edge_selected[idx] = True
+            edge_selected_set.add((n1, n2,))
+        elif parts[n1] != -1 and parts[n2] == -1:
+            parts[n2] = parts[n1]
+            edge_selected[idx] = True
+            edge_selected_set.add((n1, n2,))
+        elif parts[n2] != -1 and parts[n1] == -1:
+            parts[n1] = parts[n2]
+            edge_selected[idx] = True
+            edge_selected_set.add((n1, n2,))
+        elif parts[n1] != -1 and parts[n2] != -1 and parts[n1] != parts[n2]:
+            parts[parts == parts[n2]] = parts[n1]
+            edge_selected[idx] = True
+            edge_selected_set.add((n1, n2,))
+
+    return edge_selected
+
+
 def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: int):
     """
     My own implementation
@@ -132,55 +175,14 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: in
     :param num_nodes:
     :return:
     """
-    directed_mask = edge_index[0] < edge_index[1]
-    edge_index = edge_index[:, directed_mask]  # to_directed
-    edge_index_list = edge_index.t().cpu().tolist()
-    sort_index = torch.argsort(edge_weight[directed_mask], descending=True) if edge_weight is not None else \
-        torch.arange(len(edge_index_list), device=edge_index.device)
-    parts = [set(edge_index_list[sort_index[0]])]
-    edge_mask_idx = [sort_index[:1]]
-    node_close_list = set(edge_index_list[sort_index[0]])
+    edge_index_list = edge_index.t().cpu().numpy()
+    if edge_weight is not None:
+        sort_index = torch.argsort(edge_weight, descending=True).cpu().numpy()
+    else:
+        sort_index = np.arange(edge_index.shape[1])
 
-    for idx in sort_index[1:]:
-        n1, n2 = edge_index_list[idx]
-        if n1 not in node_close_list and n2 not in node_close_list:  # new connected component
-            parts.append({n1, n2})
-            edge_mask_idx.append(idx[None])
-            node_close_list.add(n1)
-            node_close_list.add(n2)
-        elif n1 in node_close_list and n2 not in node_close_list:
-            for s in parts:
-                if n1 in s:
-                    s.add(n2)
-                    node_close_list.add(n2)
-                    edge_mask_idx.append(idx[None])
-                    break
-        elif n2 in node_close_list and n1 not in node_close_list:
-            for s in parts:
-                if n2 in s:
-                    s.add(n1)
-                    node_close_list.add(n1)
-                    edge_mask_idx.append(idx[None])
-                    break
-        elif n1 in node_close_list and n2 in node_close_list:
-            s_idx1, s_idx2 = 0, 0
-            for si, s in enumerate(parts):
-                if n1 in s:
-                    s_idx1 = si
-                if n2 in s:
-                    s_idx2 = si
-            if s_idx1 != s_idx2:
-                s_idx1, s_idx2 = (s_idx1, s_idx2) if (s_idx1 < s_idx2) else (s_idx2, s_idx1)
-                s1 = parts.pop(s_idx2)
-                s2 = parts.pop(s_idx1)
-                parts.append(s1 | s2)
-                edge_mask_idx.append(idx[None])
-
-    assert len(parts) == 1  # if the original graph is a connected component, then the span tree is also a component
-    edge_mask_idx = torch.cat(edge_mask_idx)
-    edge_mask = torch.zeros(edge_index.shape[1], dtype=torch.bool, device=edge_index.device)
-    edge_mask[edge_mask_idx] = True
-    _, edge_mask = to_undirected(edge_index, edge_mask, num_nodes=num_nodes)
+    edge_mask = numba_kruskal(sort_index, edge_index_list, num_nodes)
+    edge_mask = torch.from_numpy(edge_mask).to(edge_index.device)
     return edge_mask
 
 

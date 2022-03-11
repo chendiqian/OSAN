@@ -1,14 +1,14 @@
 import os
-from typing import Tuple, Optional, List, Dict, Mapping
+from typing import Tuple, Optional
 from argparse import Namespace
 
 from torch_geometric.datasets import TUDataset
 from torch_geometric.transforms import Compose
 
 from data.custom_dataloader import MYDataLoader
-from data.subgraph_policy import policy2transform, DeckSampler, RawNodeSampler, RawEdgeSampler
 from data.custom_datasets import CustomTUDataset
 from data.data_utils import GraphToUndirected
+from subgraph.subgraph_policy import policy2transform, DeckSampler, RawNodeSampler, RawEdgeSampler, RawKhopSampler
 
 
 def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDataLoader]]:
@@ -31,6 +31,8 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
                     transform = RawNodeSampler(args.num_subgraphs, args.sample_node_k)
                 elif args.sample_policy == 'edge':
                     transform = RawEdgeSampler(args.num_subgraphs, args.sample_edge_k)
+                elif args.sample_policy == 'khop_subgraph':
+                    transform = RawKhopSampler(args.num_subgraphs, args.khop)
                 else:
                     raise NotImplementedError(f"Not support {args.sample_policy} for sample on the fly.")
             dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full", pre_transform=pre_transform)

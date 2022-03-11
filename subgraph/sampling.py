@@ -1,9 +1,10 @@
 from typing import List, Optional, Tuple, Sequence
+import random
 
 import torch
 from torch import Tensor, LongTensor
 from torch_geometric.data import Data
-from torch_geometric.utils import is_undirected, to_undirected
+from torch_geometric.utils import is_undirected, to_undirected, k_hop_subgraph
 
 from subgraph.construct import nodesubset_to_subgraph
 
@@ -37,11 +38,18 @@ def node_rand_sampling(graph: Data,
 
 
 def edge_rand_sampling(graph: Data, n_subgraphs: int, edge_per_subgraph: int = -1) -> List[Data]:
+    """
+
+    :param graph:
+    :param n_subgraphs:
+    :param edge_per_subgraph:
+    :return:
+    """
     n_edge = graph.num_edges
     if n_edge == 0:
         return [graph for _ in range(n_subgraphs)]
 
-    if edge_per_subgraph < 0:   # drop edges
+    if edge_per_subgraph < 0:  # drop edges
         edge_per_subgraph += n_edge
 
     edge_index, edge_attr, undirected = edge_sample_preproc(graph)
@@ -63,12 +71,12 @@ def edge_rand_sampling(graph: Data, n_subgraphs: int, edge_per_subgraph: int = -
                                                     num_nodes=graph.num_nodes)
 
         graphs.append(Data(
-                    x=graph.x,
-                    edge_index=subgraph_edge_index,
-                    edge_attr=subgraph_edge_attr,
-                    num_nodes=graph.num_nodes,
-                    y=graph.y,
-                ))
+            x=graph.x,
+            edge_index=subgraph_edge_index,
+            edge_attr=subgraph_edge_attr,
+            num_nodes=graph.num_nodes,
+            y=graph.y,
+        ))
 
     return graphs
 
@@ -95,3 +103,30 @@ def edge_sample_preproc(data: Data) -> Tuple[LongTensor, Tensor, bool]:
         edge_index = data.edge_index
 
     return edge_index, edge_attr, undirected
+
+
+def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3) -> List[Data]:
+    """
+    Sample the k-hop-neighbors subgraphs randomly
+
+    :param data:
+    :param n_subgraphs:
+    :param khop:
+    :return:
+    """
+    sample_indices = random.sample(range(data.num_nodes), n_subgraphs)
+    graphs = []
+
+    for idx in sample_indices:
+        _, edge_index, _, edge_mask = k_hop_subgraph(idx,
+                                                     khop,
+                                                     data.edge_index,
+                                                     relabel_nodes=False,
+                                                     num_nodes=data.num_nodes)
+        graphs.append(Data(x=data.x,
+                           edge_index=edge_index,
+                           edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,
+                           num_nodes=data.num_nodes,
+                           y=data.y))
+
+    return graphs

@@ -11,7 +11,7 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.utils import to_undirected
 
 from subgraph.construct import nodesubset_to_subgraph
-from subgraph.sampling import node_rand_sampling, edge_rand_sampling, edge_sample_preproc
+from subgraph.sampling import node_rand_sampling, edge_rand_sampling, edge_sample_preproc, khop_subgraph_sampling
 
 
 class SamplerOnTheFly:
@@ -40,6 +40,12 @@ class RawNodeSampler(SamplerOnTheFly):
 class RawEdgeSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
         subgraphs = edge_rand_sampling(data, self.n_subgraphs, self.sample_k)
+        return subgraphs
+
+
+class RawKhopSampler(SamplerOnTheFly):
+    def __call__(self, data: Union[Data, Batch]) -> List[Data]:
+        subgraphs = khop_subgraph_sampling(data, self.n_subgraphs, self.sample_k)
         return subgraphs
 
 

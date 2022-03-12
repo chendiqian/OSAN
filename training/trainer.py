@@ -6,7 +6,7 @@ from typing import Union
 
 import torch
 from torch.utils.data import DataLoader as TorchDataLoader
-from torch_geometric.data import Batch
+from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from data.custom_dataloader import MYDataLoader
@@ -25,6 +25,18 @@ Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau]
 Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
+
+LOGITS_SELECTION = {'node': lambda x, y: x,
+                    'edge': lambda x, y: y,
+                    'khop_subgraph': lambda x, y: x, }
+
+SPLIT_IDX_SELECTION = {'node': lambda data: get_split_idx(data.ptr),
+                       'edge': lambda data: get_split_idx(data._slice_dict['edge_index']),
+                       'khop_subgraph': lambda data: get_split_idx(data.ptr), }
+
+IMLE_SUBGRAPHS_FROM_MASK = {'node': edgemasked_graphs_from_nodemask,
+                            'edge': edgemasked_graphs_from_edgemask,
+                            'khop_subgraph': edgemasked_graphs_from_nodemask, }
 
 
 class Trainer:
@@ -81,13 +93,58 @@ class Trainer:
             self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
                                                                   nb_iterations=100,
                                                                   device=device)
-            # select scheme
-            if self.imle_sample_policy == 'node':
-                self.imle_graphs_from_masks = edgemasked_graphs_from_nodemask
-            elif self.imle_sample_policy == 'edge':
-                self.imle_graphs_from_masks = edgemasked_graphs_from_edgemask
-            elif self.imle_sample_policy == 'khop_subgraph':
-                self.imle_graphs_from_masks = edgemasked_graphs_from_edgemask
+
+    def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool) -> Union[Data, Batch]:
+        """
+        Common forward propagation for train and val, only called when embedding model is trained.
+
+        :param data:
+        :param emb_model:
+        :param train:
+        :return:
+        """
+        # select idx for splitting edge / node logits
+        split_idx = SPLIT_IDX_SELECTION[self.imle_sample_policy](data)
+
+        # forward
+        logits_n, logits_e = emb_model(data)
+        logits = LOGITS_SELECTION[self.imle_sample_policy](logits_n, logits_e)
+        graphs = Batch.to_data_list(data)
+
+        # sampling based on node or edge logits
+        if self.imle_sample_policy in ['edge', 'node']:
+            torch_sample_scheme = make_get_batch_topk(split_idx,
+                                                      self.sample_k,
+                                                      return_list=not train,
+                                                      sample=not train)
+        elif self.imle_sample_policy == 'khop_subgraph':
+            torch_sample_scheme = make_khop_subpgrah(split_idx, graphs, return_list=not train, sample=not train,
+                                                     **self.sample_khop)
+        else:
+            raise NotImplementedError
+
+        if train:
+            @imle(target_distribution=self.target_distribution,
+                  noise_distribution=self.noise_distribution,
+                  input_noise_temperature=self.temp,
+                  target_noise_temperature=self.temp,
+                  nb_samples=1)
+            def imle_sample_scheme(logits: torch.Tensor):
+                return torch_sample_scheme(logits)
+            sample_idx = imle_sample_scheme(logits)
+            sample_idx = torch.split(sample_idx, split_idx, dim=0)
+        else:
+            sample_idx = torch_sample_scheme(logits)
+
+        # original graphs
+        list_subgraphs, edge_weights = zip(
+            *[IMLE_SUBGRAPHS_FROM_MASK[self.imle_sample_policy](g, i.T, grad=train) for g, i in
+              zip(graphs, sample_idx)])
+        list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
+        data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_idx], edge_weights,
+                                        self.device)
+
+        return data
 
     def train(self,
               dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
@@ -105,36 +162,7 @@ class Trainer:
             self.optimizer.zero_grad()
 
             if emb_model is not None:
-                split_idx = get_split_idx(data.ptr if self.imle_sample_policy == 'node' else
-                                          data._slice_dict['edge_index'])
-                logits = emb_model(data)
-                graphs = Batch.to_data_list(data)
-
-                if self.imle_sample_policy in ['edge', 'node']:
-                    torch_sample_scheme = make_get_batch_topk(split_idx, self.sample_k, return_list=False, sample=False)
-                elif self.imle_sample_policy == 'khop_subgraph':
-                    torch_sample_scheme = make_khop_subpgrah(split_idx, graphs, False, False, **self.sample_khop)
-                else:
-                    raise NotImplementedError
-
-                @imle(target_distribution=self.target_distribution,
-                      noise_distribution=self.noise_distribution,
-                      input_noise_temperature=self.temp,
-                      target_noise_temperature=self.temp,
-                      nb_samples=1)
-                def imle_sample_scheme(logits: torch.Tensor):
-                    return torch_sample_scheme(logits)
-
-                sample_idx = imle_sample_scheme(logits)
-                # each mask has shape (n_nodes, n_subgraphs)
-                sample_idx = torch.split(sample_idx, split_idx, dim=0)
-                # original graphs
-                list_subgraphs, edge_weights = zip(
-                    *[self.imle_graphs_from_masks(g, i.T, grad=True) for g, i in
-                      zip(graphs, sample_idx)])
-                list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
-                data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_idx], edge_weights,
-                                                self.device)
+                data = self.emb_model_forward(data, emb_model, train=True)
 
             pred = model(data)
             loss = self.criterion(pred, data.y)
@@ -164,25 +192,7 @@ class Trainer:
                 data = data.to(self.device)
 
                 if emb_model is not None:
-                    split_idx = get_split_idx(data.ptr if self.imle_sample_policy == 'node' else
-                                              data._slice_dict['edge_index'])
-                    logits = emb_model(data)
-                    if self.imle_sample_policy in ['edge', 'node']:
-                        torch_sample_scheme = make_get_batch_topk(split_idx, self.sample_k, return_list=True,
-                                                                  sample=True)
-                    elif self.imle_sample_policy == 'khop_subgraph':
-                        torch_sample_scheme = make_khop_subpgrah(split_idx, data, True, True, **self.sample_khop)
-                    else:
-                        raise NotImplementedError
-                    sample_node_idx = torch_sample_scheme(logits)
-                    graphs = Batch.to_data_list(data)
-                    list_subgraphs, edge_weights = zip(*[self.imle_graphs_from_masks(g, i.T, grad=False) for g, i in
-                                                         zip(graphs, sample_node_idx)])
-                    list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
-
-                    # new batch
-                    data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_node_idx], edge_weights,
-                                                    self.device)
+                    data = self.emb_model_forward(data, emb_model, train=False)
 
                 pred = model(data)
                 loss = self.criterion(pred, data.y)

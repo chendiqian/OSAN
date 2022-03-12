@@ -52,7 +52,7 @@ def make_get_batch_topk(ptr, sample_k, return_list, sample):
     return torch_get_batch_topk
 
 
-def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, num_subgraphs=3, prune_policy=None, coverage='full'):
+def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, prune_policy=None, **kwargs):
     @torch.no_grad()
     def torch_khop_subgraph(logits):
         """
@@ -62,9 +62,6 @@ def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, num_subgraphs=3
         :return:
         """
         logits = logits.detach()
-        # TODO: for now just use one column for k-hop sampling, later on implement more
-        logits = logits[:, 0]
-        logits = logits.reshape(-1)
         logits = torch.split(logits, ptr, dim=0)
 
         sample_instance_idx = []
@@ -73,7 +70,11 @@ def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, num_subgraphs=3
                 noise = torch.randn(l.shape, device=l.device) * (l.std(0) * 0.1)
                 l = l.clone() + noise
 
-            mask = khop_subgraphs(graphs[i], khop, l, prune_policy, coverage, num_subgraphs).T
+            mask = khop_subgraphs(graphs[i],
+                                  khop,
+                                  node_weight=l,
+                                  edge_weight=None,
+                                  prune_policy=prune_policy).T
             mask.requires_grad = False
             sample_instance_idx.append(mask)
 

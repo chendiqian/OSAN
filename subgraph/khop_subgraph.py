@@ -185,63 +185,39 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: in
 
 def khop_subgraphs(graph: Data,
                    khop: int = 3,
+                   node_weight: Optional[Tensor] = None,
                    edge_weight: Optional[Tensor] = None,
-                   prune_policy: str = 'mst',
-                   coverage: str = 'full',
-                   n_subgraphs: int = None) -> Tensor:
+                   prune_policy: str = 'mst') -> Tensor:
     """
+    Code for IMLE scheme, not sample on the fly
     For each seed node, get the k-hop neighbors first, then prune the graph as e.g. max spanning tree
 
     :param graph:
     :param khop:
+    :param node_weight:
     :param edge_weight:
     :param prune_policy:
-    :param coverage:
-    :param n_subgraphs:
     :return:
     """
     n_nodes, n_edges = graph.num_nodes, graph.num_edges
-    edge_weight4grad_list = []
+    node_weight4grad_list = []
 
-    if edge_weight is None:
-        edge_weight = torch.ones(n_edges, dtype=torch.float32, device=graph.edge_index.device)
-
-    def add_subgraph(idx: Union[int, Tensor]) -> Tuple[Tensor, Tensor]:
+    def add_subgraph(idx: Union[int, Tensor]):
         _node_idx, _edge_index, _, edge_mask = k_hop_subgraph(idx, khop, graph.edge_index, relabel_nodes=False)
 
         if prune_policy == 'mst':
-            sub_edge_weight = edge_weight[edge_mask]
-            # return the masks in edge_mask, which is a subset of full graph edges
-            sub_edge_mask = kruskal_max_span_tree(_edge_index, sub_edge_weight, graph.num_nodes)
-            edge_mask = torch.where(edge_mask)[0][sub_edge_mask]
-            edge_weight4grad = torch.zeros(n_edges, device=_edge_index.device, dtype=torch.float32)
-            edge_weight4grad[edge_mask] = 1.0
+            raise NotImplementedError
         elif prune_policy is None:
-            edge_weight4grad = edge_mask.to(torch.float32)
+            node_mask = torch.zeros(n_nodes, device=_node_idx.device, dtype=torch.float32)
+            node_mask[_node_idx] = 1.0
         else:
             raise NotImplementedError(f"Not supported policy: {prune_policy}")
 
-        edge_weight4grad_list.append(edge_weight4grad)
-        return _node_idx, edge_mask
+        node_weight4grad_list.append(node_mask)
 
-    if coverage == 'full':  # sample for each seed node
-        for i in range(n_nodes):
-            _ = add_subgraph(i)
+    indices = torch.argmax(node_weight, dim=0)
 
-    elif coverage == 'k_subgraph':  # sample at least k subgraphs so that the whole graph is covered
-        assert n_subgraphs is not None
+    for idx in indices:
+        add_subgraph(idx[None])
 
-        # close_list = set()
-        weight_for_sample = edge_weight.clone()
-        max_val = weight_for_sample.max().abs()
-
-        # TODO: intrinsic problem of IMLE, if sample more for some graphs, they cannot concate along dim=0
-        # while len(edge_weight4grad_list) < n_subgraphs or len(close_list) < n_nodes:
-        while len(edge_weight4grad_list) < n_subgraphs:
-            idx = torch.argmax(weight_for_sample)
-            idx = graph.edge_index[0, idx][None]
-            node_idx, visited_edges = add_subgraph(idx)
-            weight_for_sample[visited_edges] -= max_val
-            # close_list.update(node_idx.cpu().tolist())
-
-    return torch.vstack(edge_weight4grad_list)
+    return torch.vstack(node_weight4grad_list)

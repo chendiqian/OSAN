@@ -39,7 +39,6 @@ def get_parse() -> Namespace:
     # k-hop-subgraph
     parser.add_argument('--khop', type=int, default=7)
     parser.add_argument('--prune_policy', default=None, choices=[None, 'mst'])
-    parser.add_argument('--coverage', default='k_subgraph', choices=['k_subgraph'])
 
     parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
@@ -61,7 +60,6 @@ def get_parse() -> Namespace:
     args = parser.parse_args()
     args.khop_subgraph = {'khop': args.khop,
                           'prune_policy': args.prune_policy,
-                          'coverage': args.coverage,
                           'num_subgraphs': args.num_subgraphs}
     return args
 
@@ -95,7 +93,7 @@ def naming(args: Namespace) -> str:
                     f'IMLE_{args.train_embd_model}_'
             name += f'samplek_{args.sample_node_k if args.sample_policy == "node" else args.sample_edge_k}_' \
                 if args.sample_policy in ['node', 'edge'] else \
-                f'khop{args.khop}_{args.prune_policy}_{args.coverage}_'
+                f'khop{args.khop}_{args.prune_policy}_'
     else:
         name += f'esanpolicy_{args.esan_policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
@@ -142,8 +140,7 @@ if __name__ == '__main__':
         emb_model = NetGCN(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
-                           args.num_subgraphs,
-                           args.sample_policy).to(device)
+                           args.num_subgraphs).to(device)
         train_params = list(emb_model.parameters()) + list(model.parameters())
     else:
         emb_model = None

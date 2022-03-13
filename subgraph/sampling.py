@@ -7,6 +7,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils import is_undirected, to_undirected, k_hop_subgraph
 
 from subgraph.construct import nodesubset_to_subgraph
+from subgraph.khop_subgraph import kruskal_max_span_tree
 
 
 def node_rand_sampling(graph: Data,
@@ -105,13 +106,14 @@ def edge_sample_preproc(data: Data) -> Tuple[LongTensor, Tensor, bool]:
     return edge_index, edge_attr, undirected
 
 
-def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3) -> List[Data]:
+def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3, prune_policy: str = None) -> List[Data]:
     """
     Sample the k-hop-neighbors subgraphs randomly
 
     :param data:
     :param n_subgraphs:
     :param khop:
+    :param prune_policy:
     :return:
     """
     sample_indices = random.sample(range(data.num_nodes), n_subgraphs)
@@ -123,6 +125,15 @@ def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3) -> List[
                                                      data.edge_index,
                                                      relabel_nodes=False,
                                                      num_nodes=data.num_nodes)
+
+        if prune_policy == 'mst':
+            sub_edge_mask = kruskal_max_span_tree(edge_index, None, data.num_nodes)
+            edge_mask = torch.where(edge_mask)[0][sub_edge_mask]
+            edge_index = edge_index[:, sub_edge_mask]
+        elif prune_policy is None:
+            pass
+        else:
+            raise NotImplementedError
         graphs.append(Data(x=data.x,
                            edge_index=edge_index,
                            edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,

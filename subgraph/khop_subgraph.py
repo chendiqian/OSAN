@@ -167,7 +167,7 @@ def numba_kruskal(sort_index: np.ndarray, edge_index_list: np.ndarray, num_nodes
     return edge_selected
 
 
-def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: int) -> Tensor:
+def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Optional[Tensor], num_nodes: int) -> Tensor:
     """
     My own implementation
 
@@ -177,7 +177,10 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Tensor, num_nodes: in
     :return:
     """
     edge_index_list = edge_index.t().cpu().numpy()
-    sort_index = torch.argsort(edge_weight, descending=True).cpu().numpy()
+    if edge_weight is not None:
+        sort_index = torch.argsort(edge_weight, descending=True).cpu().numpy()
+    else:
+        sort_index = np.arange(edge_index.shape[1])
 
     edge_mask = numba_kruskal(sort_index, edge_index_list, num_nodes)
     edge_mask = torch.from_numpy(edge_mask).to(edge_index.device)

@@ -180,7 +180,7 @@ def kruskal_max_span_tree(edge_index: Tensor, edge_weight: Optional[Tensor], num
     if edge_weight is not None:
         sort_index = torch.argsort(edge_weight, descending=True).cpu().numpy()
     else:
-        sort_index = np.arange(edge_index.shape[1])
+        sort_index = np.random.permutation(edge_index.shape[1])
 
     edge_mask = numba_kruskal(sort_index, edge_index_list, num_nodes)
     edge_mask = torch.from_numpy(edge_mask).to(edge_index.device)

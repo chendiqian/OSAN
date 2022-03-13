@@ -39,3 +39,5 @@ Do __not__ specify `--train_embd_model` and everything will be randomly sampled.
 Node delete: `python main.py --batch_size 128 --epochs 1000 --sample_policy node --sample_node_k -1 --num_subgraphs 3`
 
 Edge delete: `python main.py --batch_size 128 --epochs 1000 --sample_policy edge --sample_edge_k -1 --num_subgraphs 3`
+
+Khop-subgraph: `python main.py --batch_size 128 --epochs 1000 --sample_policy khop_subgraph --khop 5 --prune_policy mst --num_subgraphs 5`

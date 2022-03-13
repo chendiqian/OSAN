@@ -26,17 +26,19 @@ Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
-LOGITS_SELECTION = {'node': lambda x, y: x,
-                    'edge': lambda x, y: y,
-                    'khop_subgraph': lambda x, y: x, }
+LOGITS_SELECTION = {'node': lambda x, y, _: x,
+                    'edge': lambda x, y, _: y,
+                    'khop_subgraph': lambda x, y, prune: x if prune is None else y, }
 
-SPLIT_IDX_SELECTION = {'node': lambda data: get_split_idx(data.ptr),
-                       'edge': lambda data: get_split_idx(data._slice_dict['edge_index']),
-                       'khop_subgraph': lambda data: get_split_idx(data.ptr), }
+SPLIT_IDX_SELECTION = {'node': lambda data, _: get_split_idx(data.ptr),
+                       'edge': lambda data, _: get_split_idx(data._slice_dict['edge_index']),
+                       'khop_subgraph': lambda data, prune: get_split_idx(data.ptr) if prune is None else
+                       get_split_idx(data._slice_dict['edge_index']), }
 
 IMLE_SUBGRAPHS_FROM_MASK = {'node': edgemasked_graphs_from_nodemask,
                             'edge': edgemasked_graphs_from_edgemask,
-                            'khop_subgraph': edgemasked_graphs_from_nodemask, }
+                            'khop_subgraph': {None: edgemasked_graphs_from_nodemask,
+                                              'mst': edgemasked_graphs_from_edgemask}, }
 
 
 class Trainer:
@@ -104,11 +106,11 @@ class Trainer:
         :return:
         """
         # select idx for splitting edge / node logits
-        split_idx = SPLIT_IDX_SELECTION[self.imle_sample_policy](data)
+        split_idx = SPLIT_IDX_SELECTION[self.imle_sample_policy](data, self.sample_khop['prune_policy'])
 
         # forward
         logits_n, logits_e = emb_model(data)
-        logits = LOGITS_SELECTION[self.imle_sample_policy](logits_n, logits_e)
+        logits = LOGITS_SELECTION[self.imle_sample_policy](logits_n, logits_e, self.sample_khop['prune_policy'])
         graphs = Batch.to_data_list(data)
 
         # sampling based on node or edge logits
@@ -131,14 +133,18 @@ class Trainer:
                   nb_samples=1)
             def imle_sample_scheme(logits: torch.Tensor):
                 return torch_sample_scheme(logits)
+
             sample_idx = imle_sample_scheme(logits)
             sample_idx = torch.split(sample_idx, split_idx, dim=0)
         else:
             sample_idx = torch_sample_scheme(logits)
 
         # original graphs
+        subgraphs_from_mask = IMLE_SUBGRAPHS_FROM_MASK[self.imle_sample_policy]
+        if isinstance(subgraphs_from_mask, dict):
+            subgraphs_from_mask = subgraphs_from_mask[self.sample_khop['prune_policy']]
         list_subgraphs, edge_weights = zip(
-            *[IMLE_SUBGRAPHS_FROM_MASK[self.imle_sample_policy](g, i.T, grad=train) for g, i in
+            *[subgraphs_from_mask(g, i.T, grad=train) for g, i in
               zip(graphs, sample_idx)])
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
         data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_idx], edge_weights,

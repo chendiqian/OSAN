@@ -72,8 +72,7 @@ def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, prune_policy=No
 
             mask = khop_subgraphs(graphs[i],
                                   khop,
-                                  node_weight=l,
-                                  edge_weight=None,
+                                  instance_weight=l,
                                   prune_policy=prune_policy).T
             mask.requires_grad = False
             sample_instance_idx.append(mask)

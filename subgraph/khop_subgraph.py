@@ -18,6 +18,7 @@ from torch_scatter import scatter
 # from torch_geometric.utils.convert import from_cugraph
 
 
+# Alternative: cugraph implementation
 # def _maximum_spanning_tree_subgraph(G: Graph):
 #     mst_subgraph = Graph()
 #     if type(G) is not Graph:
@@ -59,6 +60,7 @@ from torch_scatter import scatter
 #     return graph_list
 
 
+# Alternative: networkx implementation, but need to change data type (with stupid for loops)
 # def to_networkx(num_nodes: int,
 #                 edge_index: Tensor,
 #                 node_idx: Tensor = None,
@@ -124,6 +126,18 @@ from torch_scatter import scatter
 #     edge_index = to_undirected(edge_index, num_nodes=node_idx.numel())
 #
 #     return edge_index
+
+
+# Alternative: scipy csgraph implementation, but 10x slower
+# def csgraph_mini_span_tree(edge_index, edge_weight, num_nodes):
+#     from scipy.sparse import coo_matrix
+#     from scipy.sparse.csgraph import minimum_spanning_tree
+#
+#     row, col = edge_index.cpu().numpy()
+#     weight = edge_weight.cpu().numpy()
+#     mat = coo_matrix((-weight, (row, col)), shape=(num_nodes, num_nodes))
+#     new = minimum_spanning_tree(mat)
+#     return new
 
 
 @numba.njit(cache=True, locals={'parts': numba.int32[::1], 'edge_selected': numba.bool_[::1]})

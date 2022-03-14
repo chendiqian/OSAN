@@ -1,9 +1,9 @@
 from typing import Tuple
 
 import torch
-from torch_geometric.data import Batch
 
 from subgraph.khop_subgraph import khop_subgraphs
+from subgraph.greedy_expanding_tree import greedy_expand_tree
 
 
 def get_split_idx(inc_tensor: torch.Tensor) -> Tuple:
@@ -83,3 +83,33 @@ def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, prune_policy=No
         return sample_instance_idx
 
     return torch_khop_subgraph
+
+
+def make_greedy_expand_subpgrah(ptr, graphs, sample_k, return_list, sample):
+    @torch.no_grad()
+    def torch_greedy_expand_subgraph(logits):
+        """
+        Connected khop-subgraphs, can be pruned with max spanning tree algorithm
+
+        :param logits:
+        :return:
+        """
+        logits = logits.detach()
+        logits = torch.split(logits, ptr, dim=0)
+
+        sample_instance_idx = []
+        for i, l in enumerate(logits):
+            if sample:
+                noise = torch.randn(l.shape, device=l.device) * (l.std(0) * 0.1)
+                l = l.clone() + noise
+
+            mask = greedy_expand_tree(graphs[i], l, sample_k).T
+            mask.requires_grad = False
+            sample_instance_idx.append(mask)
+
+        if not return_list:
+            sample_instance_idx = torch.cat(sample_instance_idx, dim=0)
+            sample_instance_idx.requires_grad = False
+        return sample_instance_idx
+
+    return torch_greedy_expand_subgraph

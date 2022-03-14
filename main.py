@@ -33,7 +33,8 @@ def get_parse() -> Namespace:
     parser.add_argument('--save_freq', type=int, default=100)
 
     # I-MLE
-    parser.add_argument('--sample_policy', type=str, default='node', choices=['node', 'edge', 'khop_subgraph'])
+    parser.add_argument('--sample_policy', type=str, default='node',
+                        choices=['node', 'edge', 'khop_subgraph', 'greedy_exp'])
     parser.add_argument('--sample_edge_k', type=int, default=-1, help='number of edges sampled')
     parser.add_argument('--sample_node_k', type=int, default=-1, help='top-k nodes, i.e. n_nodes of each subgraph')
     # k-hop-subgraph
@@ -91,9 +92,12 @@ def naming(args: Namespace) -> str:
             name += f'policy_{args.sample_policy}_' \
                     f'n_subg_{args.num_subgraphs}_' \
                     f'IMLE_{args.train_embd_model}_'
-            name += f'samplek_{args.sample_node_k if args.sample_policy == "node" else args.sample_edge_k}_' \
-                if args.sample_policy in ['node', 'edge'] else \
-                f'khop{args.khop}_{args.prune_policy}_'
+            if args.sample_policy in ["node", "greedy_exp"]:
+                name += f'samplek_{args.sample_node_k}_'
+            elif args.sample_policy in ['edge']:
+                name += f'samplek_{args.sample_edge_k}_'
+            elif args.sample_policy in ['khop_subgraph']:
+                name += f'khop{args.khop}_{args.prune_policy}_'
     else:
         name += f'esanpolicy_{args.esan_policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
@@ -149,7 +153,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     trainer = Trainer(task_type=task_type,
                       imle_sample_policy=args.sample_policy,
-                      sample_k=args.sample_node_k if args.sample_policy == 'node' else args.sample_edge_k,
+                      sample_k=args.sample_node_k if args.sample_policy in ['node', 'greedy_exp'] else args.sample_edge_k,
                       sample_khop=args.khop_subgraph,
                       voting=args.voting,
                       max_patience=args.patience,

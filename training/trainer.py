@@ -15,7 +15,7 @@ from imle.target import TargetDistribution
 from imle.wrapper import imle
 from subgraph.construct import (edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask,
                                 construct_subgraph_batch, )
-from training.imle_scheme import get_split_idx, make_get_batch_topk, make_khop_subpgrah
+from training.imle_scheme import get_split_idx, make_get_batch_topk, make_khop_subpgrah, make_greedy_expand_subpgrah
 
 from models import NetGINE, NetGCN
 
@@ -28,17 +28,20 @@ Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
 LOGITS_SELECTION = {'node': lambda x, y, _: x,
                     'edge': lambda x, y, _: y,
-                    'khop_subgraph': lambda x, y, prune: x if prune is None else y, }
+                    'khop_subgraph': lambda x, y, prune: x if prune is None else y,
+                    'greedy_exp': lambda x, y, _: x, }
 
 SPLIT_IDX_SELECTION = {'node': lambda data, _: get_split_idx(data.ptr),
                        'edge': lambda data, _: get_split_idx(data._slice_dict['edge_index']),
                        'khop_subgraph': lambda data, prune: get_split_idx(data.ptr) if prune is None else
-                       get_split_idx(data._slice_dict['edge_index']), }
+                       get_split_idx(data._slice_dict['edge_index']),
+                       'greedy_exp': lambda data, _: get_split_idx(data.ptr), }
 
 IMLE_SUBGRAPHS_FROM_MASK = {'node': edgemasked_graphs_from_nodemask,
                             'edge': edgemasked_graphs_from_edgemask,
                             'khop_subgraph': {None: edgemasked_graphs_from_nodemask,
-                                              'mst': edgemasked_graphs_from_edgemask}, }
+                                              'mst': edgemasked_graphs_from_edgemask},
+                            'greedy_exp': edgemasked_graphs_from_nodemask}
 
 
 class Trainer:
@@ -122,8 +125,9 @@ class Trainer:
         elif self.imle_sample_policy == 'khop_subgraph':
             torch_sample_scheme = make_khop_subpgrah(split_idx, graphs, return_list=not train, sample=not train,
                                                      **self.sample_khop)
-        else:
-            raise NotImplementedError
+        elif self.imle_sample_policy == 'greedy_exp':
+            torch_sample_scheme = make_greedy_expand_subpgrah(split_idx, graphs, self.sample_k,
+                                                              return_list=not train, sample=not train, )
 
         if train:
             @imle(target_distribution=self.target_distribution,

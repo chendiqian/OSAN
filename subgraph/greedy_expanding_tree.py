@@ -56,7 +56,7 @@ def greedy_expand_tree(graph: Data, node_weight: torch.Tensor, k: int) -> torch.
     :return:
     """
     if k >= graph.num_nodes:
-        return torch.ones_like(node_weight, device=node_weight.device)
+        return torch.ones(node_weight.shape[1], node_weight.shape[0], device=node_weight.device)
 
     edge_index = graph.edge_index.cpu().tolist()
     n_subgraphs = node_weight.shape[1]

@@ -8,6 +8,7 @@ from torch_geometric.utils import is_undirected, to_undirected, k_hop_subgraph
 
 from subgraph.construct import nodesubset_to_subgraph
 from subgraph.khop_subgraph import kruskal_max_span_tree
+from subgraph.greedy_expanding_tree import numba_greedy_expand_tree
 
 
 def node_rand_sampling(graph: Data,
@@ -139,5 +140,18 @@ def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3, prune_po
                            edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,
                            num_nodes=data.num_nodes,
                            y=data.y))
+
+    return graphs
+
+
+def greedy_expand_sampling(graph: Data, n_subgraphs: int, node_per_subgraph: int = -1) -> List[Data]:
+    if node_per_subgraph >= graph.num_nodes:
+        return [graph] * n_subgraphs
+
+    edge_index = graph.edge_index.cpu().numpy()
+    graphs = []
+    for _ in range(n_subgraphs):
+        node_mask = numba_greedy_expand_tree(edge_index, node_per_subgraph, None, graph.num_nodes)
+        graphs.append(nodesubset_to_subgraph(graph, torch.from_numpy(node_mask), relabel=False))
 
     return graphs

@@ -9,7 +9,14 @@ from data.custom_dataloader import MYDataLoader
 from data.custom_datasets import CustomTUDataset
 from data.data_utils import GraphToUndirected
 from subgraph.subgraph_policy import policy2transform, DeckSampler, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
-    RawGreedyExpand
+    RawGreedyExpand, RawMSTSampler
+
+
+TRANSFORM_DICT = {'node': RawNodeSampler,
+                  'edge': RawEdgeSampler,
+                  'khop_subgraph': RawKhopSampler,
+                  'greedy_exp': RawGreedyExpand,
+                  'mst': RawMSTSampler, }
 
 
 def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDataLoader]]:
@@ -28,16 +35,7 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
         if args.esan_policy == 'null':   # I-MLE, or normal training, or sample on the fly
             transform = None
             if (not args.train_embd_model) and (args.num_subgraphs > 0):   # sample-on-the-fly
-                if args.sample_policy == 'node':
-                    transform = RawNodeSampler(args.num_subgraphs, args.sample_node_k)
-                elif args.sample_policy == 'edge':
-                    transform = RawEdgeSampler(args.num_subgraphs, args.sample_edge_k)
-                elif args.sample_policy == 'khop_subgraph':
-                    transform = RawKhopSampler(args.num_subgraphs, args.khop, args.prune_policy)
-                elif args.sample_policy == 'greedy_exp':
-                    transform = RawGreedyExpand(args.num_subgraphs, args.sample_node_k)
-                else:
-                    raise NotImplementedError(f"Not support {args.sample_policy} for sample on the fly.")
+                transform = TRANSFORM_DICT[args.sample_policy](args.num_subgraphs, args.sample_k)
             dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full", pre_transform=pre_transform)
         else:   # ESAN: sample from the deck
             transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)

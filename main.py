@@ -34,13 +34,9 @@ def get_parse() -> Namespace:
 
     # I-MLE
     parser.add_argument('--sample_policy', type=str, default='node',
-                        choices=['node', 'edge', 'khop_subgraph', 'greedy_exp'])
-    parser.add_argument('--sample_edge_k', type=int, default=-1, help='number of edges sampled')
-    parser.add_argument('--sample_node_k', type=int, default=-1, help='top-k nodes, i.e. n_nodes of each subgraph')
-    # k-hop-subgraph
-    parser.add_argument('--khop', type=int, default=7)
-    parser.add_argument('--prune_policy', default=None, choices=[None, 'mst'])
-
+                        choices=['node', 'edge', 'khop_subgraph', 'mst', 'greedy_exp'])
+    parser.add_argument('--sample_k', type=int, default=-1, help='Instance to be sampled, can be num nodes, num edges '
+                                                                 'or k-hop neigbors')
     parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
     parser.add_argument('--beta', type=float, default=10.)
@@ -59,9 +55,6 @@ def get_parse() -> Namespace:
     parser.add_argument('--debug', action='store_true', help='when debugging, take a small subset of the datasets')
 
     args = parser.parse_args()
-    args.khop_subgraph = {'khop': args.khop,
-                          'prune_policy': args.prune_policy,
-                          'num_subgraphs': args.num_subgraphs}
     return args
 
 
@@ -91,13 +84,8 @@ def naming(args: Namespace) -> str:
         else:
             name += f'policy_{args.sample_policy}_' \
                     f'n_subg_{args.num_subgraphs}_' \
-                    f'IMLE_{args.train_embd_model}_'
-            if args.sample_policy in ["node", "greedy_exp"]:
-                name += f'samplek_{args.sample_node_k}_'
-            elif args.sample_policy in ['edge']:
-                name += f'samplek_{args.sample_edge_k}_'
-            elif args.sample_policy in ['khop_subgraph']:
-                name += f'khop{args.khop}_{args.prune_policy}_'
+                    f'IMLE_{args.train_embd_model}_' \
+                    f'samplek_{args.sample_k}_'
     else:
         name += f'esanpolicy_{args.esan_policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
@@ -153,8 +141,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     trainer = Trainer(task_type=task_type,
                       imle_sample_policy=args.sample_policy,
-                      sample_k=args.sample_node_k if args.sample_policy in ['node', 'greedy_exp'] else args.sample_edge_k,
-                      sample_khop=args.khop_subgraph,
+                      sample_k=args.sample_k,
                       voting=args.voting,
                       max_patience=args.patience,
                       optimizer=optimizer,

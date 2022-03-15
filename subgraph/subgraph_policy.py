@@ -12,7 +12,7 @@ from torch_geometric.utils import to_undirected
 
 from subgraph.construct import nodesubset_to_subgraph
 from subgraph.sampling_baseline import node_rand_sampling, edge_rand_sampling, edge_sample_preproc, khop_subgraph_sampling, \
-    greedy_expand_sampling
+    greedy_expand_sampling, max_spanning_tree_subgraph
 
 
 class SamplerOnTheFly:
@@ -45,26 +45,20 @@ class RawEdgeSampler(SamplerOnTheFly):
 
 
 class RawKhopSampler(SamplerOnTheFly):
-    def __init__(self, n_subgraphs: int = 1, sample_k: Optional[int] = None, prune_policy: str = None):
-        """
-
-        :param n_subgraphs:
-        :param sample_k: nodes / edges per subgraphs
-        :param prune_policy:
-        """
-        super(SamplerOnTheFly, self).__init__()
-        self.n_subgraphs = n_subgraphs
-        self.sample_k = sample_k
-        self.prune_policy = prune_policy
-
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = khop_subgraph_sampling(data, self.n_subgraphs, self.sample_k, self.prune_policy)
+        subgraphs = khop_subgraph_sampling(data, self.n_subgraphs, self.sample_k)
         return subgraphs
 
 
 class RawGreedyExpand(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
         subgraphs = greedy_expand_sampling(data, self.n_subgraphs, self.sample_k)
+        return subgraphs
+
+
+class RawMSTSampler(SamplerOnTheFly):
+    def __call__(self, data: Union[Data, Batch]) -> List[Data]:
+        subgraphs = max_spanning_tree_subgraph(data, self.n_subgraphs)
         return subgraphs
 
 

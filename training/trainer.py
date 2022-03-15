@@ -15,7 +15,7 @@ from imle.target import TargetDistribution
 from imle.wrapper import imle
 from subgraph.construct import (edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask,
                                 construct_subgraph_batch, )
-from training.imle_scheme import get_split_idx, make_get_batch_topk, make_khop_subpgrah, make_greedy_expand_subpgrah
+from training.imle_scheme import *
 
 from models import NetGINE, NetGCN
 
@@ -26,22 +26,23 @@ Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
-LOGITS_SELECTION = {'node': lambda x, y, _: x,
-                    'edge': lambda x, y, _: y,
-                    'khop_subgraph': lambda x, y, prune: x if prune is None else y,
-                    'greedy_exp': lambda x, y, _: x, }
+LOGITS_SELECTION = {'node': lambda x, y: x,
+                    'edge': lambda x, y: y,
+                    'khop_subgraph': lambda x, y: x,
+                    'greedy_exp': lambda x, y: x,
+                    'mst': lambda x, y: y, }
 
-SPLIT_IDX_SELECTION = {'node': lambda data, _: get_split_idx(data.ptr),
-                       'edge': lambda data, _: get_split_idx(data._slice_dict['edge_index']),
-                       'khop_subgraph': lambda data, prune: get_split_idx(data.ptr) if prune is None else
-                       get_split_idx(data._slice_dict['edge_index']),
-                       'greedy_exp': lambda data, _: get_split_idx(data.ptr), }
+SPLIT_IDX_SELECTION = {'node': lambda data: get_split_idx(data.ptr),
+                       'edge': lambda data: get_split_idx(data._slice_dict['edge_index']),
+                       'khop_subgraph': lambda data: get_split_idx(data.ptr),
+                       'greedy_exp': lambda data: get_split_idx(data.ptr),
+                       'mst': lambda data: get_split_idx(data._slice_dict['edge_index']),}
 
 IMLE_SUBGRAPHS_FROM_MASK = {'node': edgemasked_graphs_from_nodemask,
                             'edge': edgemasked_graphs_from_edgemask,
-                            'khop_subgraph': {None: edgemasked_graphs_from_nodemask,
-                                              'mst': edgemasked_graphs_from_edgemask},
-                            'greedy_exp': edgemasked_graphs_from_nodemask}
+                            'khop_subgraph': edgemasked_graphs_from_nodemask,
+                            'greedy_exp': edgemasked_graphs_from_nodemask,
+                            'mst': edgemasked_graphs_from_edgemask}
 
 
 class Trainer:
@@ -49,7 +50,6 @@ class Trainer:
                  task_type: str,
                  imle_sample_policy: str,
                  sample_k: int,
-                 sample_khop: dict,
                  voting: int,
                  max_patience: int,
                  optimizer: Optimizer,
@@ -63,7 +63,6 @@ class Trainer:
         :param task_type:
         :param imle_sample_policy:
         :param sample_k: sample nodes or edges
-        :param sample_khop: the dictionary for sampling k-hop neighbors
         :param voting:
         :param max_patience:
         :param optimizer:
@@ -80,7 +79,6 @@ class Trainer:
         self.voting = voting
         self.imle_sample_policy = imle_sample_policy
         self.sample_k = sample_k
-        self.sample_khop = sample_khop
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.criterion = criterion
@@ -109,11 +107,11 @@ class Trainer:
         :return:
         """
         # select idx for splitting edge / node logits
-        split_idx = SPLIT_IDX_SELECTION[self.imle_sample_policy](data, self.sample_khop['prune_policy'])
+        split_idx = SPLIT_IDX_SELECTION[self.imle_sample_policy](data)
 
         # forward
         logits_n, logits_e = emb_model(data)
-        logits = LOGITS_SELECTION[self.imle_sample_policy](logits_n, logits_e, self.sample_khop['prune_policy'])
+        logits = LOGITS_SELECTION[self.imle_sample_policy](logits_n, logits_e)
         graphs = Batch.to_data_list(data)
 
         # sampling based on node or edge logits
@@ -123,11 +121,15 @@ class Trainer:
                                                       return_list=not train,
                                                       sample=not train)
         elif self.imle_sample_policy == 'khop_subgraph':
-            torch_sample_scheme = make_khop_subpgrah(split_idx, graphs, return_list=not train, sample=not train,
-                                                     **self.sample_khop)
+            torch_sample_scheme = make_khop_subpgrah(split_idx, graphs, self.sample_k,
+                                                     return_list=not train, sample=not train)
         elif self.imle_sample_policy == 'greedy_exp':
             torch_sample_scheme = make_greedy_expand_subpgrah(split_idx, graphs, self.sample_k,
-                                                              return_list=not train, sample=not train, )
+                                                              return_list=not train, sample=not train)
+        elif self.imle_sample_policy == 'mst':
+            torch_sample_scheme = make_mst_subgraph(split_idx, graphs, return_list=not train, sample=not train)
+        else:
+            raise NotImplementedError
 
         if train:
             @imle(target_distribution=self.target_distribution,
@@ -145,8 +147,6 @@ class Trainer:
 
         # original graphs
         subgraphs_from_mask = IMLE_SUBGRAPHS_FROM_MASK[self.imle_sample_policy]
-        if isinstance(subgraphs_from_mask, dict):
-            subgraphs_from_mask = subgraphs_from_mask[self.sample_khop['prune_policy']]
         list_subgraphs, edge_weights = zip(
             *[subgraphs_from_mask(g, i.T, grad=train) for g, i in
               zip(graphs, sample_idx)])

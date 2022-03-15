@@ -4,6 +4,7 @@ import torch
 
 from subgraph.khop_subgraph import khop_subgraphs
 from subgraph.greedy_expanding_tree import greedy_expand_tree
+from subgraph.mst_subgraph import mst_subgraph_sampling
 
 
 def get_split_idx(inc_tensor: torch.Tensor) -> Tuple:
@@ -52,7 +53,7 @@ def make_get_batch_topk(ptr, sample_k, return_list, sample):
     return torch_get_batch_topk
 
 
-def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, prune_policy=None, **kwargs):
+def make_khop_subpgrah(ptr, graphs, khop, return_list, sample):
     @torch.no_grad()
     def torch_khop_subgraph(logits):
         """
@@ -72,8 +73,7 @@ def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, prune_policy=No
 
             mask = khop_subgraphs(graphs[i],
                                   khop,
-                                  instance_weight=l,
-                                  prune_policy=prune_policy).T
+                                  instance_weight=l).T
             mask.requires_grad = False
             sample_instance_idx.append(mask)
 
@@ -83,6 +83,30 @@ def make_khop_subpgrah(ptr, graphs, return_list, sample, khop=3, prune_policy=No
         return sample_instance_idx
 
     return torch_khop_subgraph
+
+
+def make_mst_subgraph(ptr, graphs, return_list, sample):
+    @torch.no_grad()
+    def torch_mst_subgraph(logits):
+        logits = logits.detach()
+        logits = torch.split(logits, ptr, dim=0)
+
+        sample_instance_idx = []
+        for i, l in enumerate(logits):
+            if sample:
+                noise = torch.randn(l.shape, device=l.device) * (l.std(0) * 0.1)
+                l = l.clone() + noise
+
+            mask = mst_subgraph_sampling(graphs[i], l).T
+            mask.requires_grad = False
+            sample_instance_idx.append(mask)
+
+        if not return_list:
+            sample_instance_idx = torch.cat(sample_instance_idx, dim=0)
+            sample_instance_idx.requires_grad = False
+        return sample_instance_idx
+
+    return torch_mst_subgraph
 
 
 def make_greedy_expand_subpgrah(ptr, graphs, sample_k, return_list, sample):

@@ -232,4 +232,4 @@ def mst_subgraph_sampling(graph: Data, edge_weight: Tensor) -> Tensor:
                                           device=graph.edge_index.device)
         edge_masks.append(edge_mask)
 
-    return torch.vstack(edge_masks)
+    return torch.vstack(edge_masks).to(torch.float32)

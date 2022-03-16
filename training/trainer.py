@@ -35,7 +35,7 @@ SPLIT_IDX_SELECTION = {'node': lambda data: get_split_idx(data.ptr),
                        'edge': lambda data: get_split_idx(data._slice_dict['edge_index']),
                        'khop_subgraph': lambda data: get_split_idx(data.ptr),
                        'greedy_exp': lambda data: get_split_idx(data.ptr),
-                       'mst': lambda data: get_split_idx(data._slice_dict['edge_index']),}
+                       'mst': lambda data: get_split_idx(data._slice_dict['edge_index']), }
 
 IMLE_SUBGRAPHS_FROM_MASK = {'node': edgemasked_graphs_from_nodemask,
                             'edge': edgemasked_graphs_from_edgemask,
@@ -95,6 +95,12 @@ class Trainer:
             self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
                                                                   nb_iterations=100,
                                                                   device=device)
+            self.imle_scheduler = IMLEScheme(self.imle_sample_policy,
+                                             None,
+                                             None,
+                                             self.sample_k,
+                                             return_list=False,
+                                             sample=False)
 
     def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool) -> Union[Data, Batch]:
         """
@@ -113,22 +119,8 @@ class Trainer:
         logits = LOGITS_SELECTION[self.imle_sample_policy](logits_n, logits_e)
         graphs = Batch.to_data_list(data)
 
-        # sampling based on node or edge logits
-        if self.imle_sample_policy in ['edge', 'node']:
-            torch_sample_scheme = make_get_batch_topk(split_idx,
-                                                      self.sample_k,
-                                                      return_list=not train,
-                                                      sample=not train)
-        elif self.imle_sample_policy == 'khop_subgraph':
-            torch_sample_scheme = make_khop_subpgrah(split_idx, graphs, self.sample_k,
-                                                     return_list=not train, sample=not train)
-        elif self.imle_sample_policy == 'greedy_exp':
-            torch_sample_scheme = make_greedy_expand_subpgrah(split_idx, graphs, self.sample_k,
-                                                              return_list=not train, sample=not train)
-        elif self.imle_sample_policy == 'mst':
-            torch_sample_scheme = make_mst_subgraph(split_idx, graphs, return_list=not train, sample=not train)
-        else:
-            raise NotImplementedError
+        self.imle_scheduler.graphs = graphs
+        self.imle_scheduler.ptr = split_idx
 
         if train:
             @imle(target_distribution=self.target_distribution,
@@ -137,12 +129,12 @@ class Trainer:
                   target_noise_temperature=self.temp,
                   nb_samples=1)
             def imle_sample_scheme(logits: torch.Tensor):
-                return torch_sample_scheme(logits)
+                return self.imle_scheduler.torch_sample_scheme(logits)
 
             sample_idx = imle_sample_scheme(logits)
             sample_idx = torch.split(sample_idx, split_idx, dim=0)
         else:
-            sample_idx = torch_sample_scheme(logits)
+            sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
 
         # original graphs
         subgraphs_from_mask = IMLE_SUBGRAPHS_FROM_MASK[self.imle_sample_policy]
@@ -162,6 +154,9 @@ class Trainer:
 
         if emb_model is not None:
             emb_model.train()
+            self.imle_scheduler.return_list = False
+            self.imle_scheduler.sample = False
+
         model.train()
         train_losses = torch.tensor(0., device=self.device)
         num_graphs = 0
@@ -183,6 +178,11 @@ class Trainer:
 
         train_loss = train_losses.item() / num_graphs
         self.curves['train'].append(train_loss)
+
+        if emb_model is not None:
+            del self.imle_scheduler.graphs
+            del self.imle_scheduler.ptr
+
         return train_loss
 
     @torch.no_grad()
@@ -192,6 +192,9 @@ class Trainer:
                    model: Train_model, ):
         if emb_model is not None:
             emb_model.eval()
+            self.imle_scheduler.return_list = True
+            self.imle_scheduler.sample = True
+
         model.eval()
         val_losses = torch.tensor(0., device=self.device)
         num_graphs = 0
@@ -222,6 +225,11 @@ class Trainer:
                 early_stop = True
 
         self.curves['val'].append(val_loss)
+
+        if emb_model is not None:
+            del self.imle_scheduler.graphs
+            del self.imle_scheduler.ptr
+
         return val_loss, early_stop
 
     def save_curve(self, path):

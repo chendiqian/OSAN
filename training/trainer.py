@@ -4,7 +4,6 @@ import pickle
 from collections import defaultdict
 from typing import Union
 
-import torch
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader as PyGDataLoader

@@ -47,14 +47,14 @@ def edge_rand_sampling(graph: Data, n_subgraphs: int, edge_per_subgraph: int = -
     :param edge_per_subgraph:
     :return:
     """
-    n_edge = graph.num_edges
-    if n_edge == 0:
+    edge_index, edge_attr, undirected = edge_sample_preproc(graph)
+
+    n_edge = edge_index.shape[1]
+    if n_edge == 0 or edge_per_subgraph > n_edge:
         return [graph for _ in range(n_subgraphs)]
 
     if edge_per_subgraph < 0:  # drop edges
         edge_per_subgraph += n_edge
-
-    edge_index, edge_attr, undirected = edge_sample_preproc(graph)
 
     graphs = []
     for i in range(n_subgraphs):

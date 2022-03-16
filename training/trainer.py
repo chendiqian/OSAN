@@ -2,8 +2,9 @@ import itertools
 import os
 import pickle
 from collections import defaultdict
-from typing import Union
+from typing import Union,Optional
 
+import torch.linalg
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader as PyGDataLoader
@@ -48,6 +49,7 @@ class Trainer:
     def __init__(self,
                  task_type: str,
                  imle_sample_policy: str,
+                 aux_loss_weight: float,
                  sample_k: int,
                  voting: int,
                  max_patience: int,
@@ -61,6 +63,7 @@ class Trainer:
 
         :param task_type:
         :param imle_sample_policy:
+        :param aux_loss_weight:
         :param sample_k: sample nodes or edges
         :param voting:
         :param max_patience:
@@ -77,6 +80,7 @@ class Trainer:
         self.task_type = task_type
         self.voting = voting
         self.imle_sample_policy = imle_sample_policy
+        self.aux_loss_weight = aux_loss_weight
         self.sample_k = sample_k
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -102,7 +106,20 @@ class Trainer:
                                              return_list=False,
                                              sample=False)
 
-    def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool) -> Union[Data, Batch]:
+    def get_aux_loss(self, logits: torch.Tensor):
+        """
+        Aux loss that the sampled masks should be different
+
+        :param logits:
+        :return:
+        """
+        logits = logits / torch.linalg.norm(logits, ord=None, dim=0, keepdim=True)
+        eye = 1 - torch.eye(logits.shape[1], device=logits.device)
+        loss = ((logits.t() @ logits) * eye).mean()
+        return loss * self.aux_loss_weight
+
+    def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool)\
+            -> Tuple[Union[Data, Batch], Optional[torch.FloatType]]:
         """
         Common forward propagation for train and val, only called when embedding model is trained.
 
@@ -122,6 +139,7 @@ class Trainer:
         self.imle_scheduler.graphs = graphs
         self.imle_scheduler.ptr = split_idx
 
+        aux_loss = None
         if train:
             @imle(target_distribution=self.target_distribution,
                   noise_distribution=self.noise_distribution,
@@ -132,7 +150,11 @@ class Trainer:
                 return self.imle_scheduler.torch_sample_scheme(logits)
 
             sample_idx = imle_sample_scheme(logits)
+            if self.aux_loss_weight > 0:
+                aux_loss = self.get_aux_loss(sample_idx)
+
             sample_idx = torch.split(sample_idx, split_idx, dim=0)
+
         else:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
 
@@ -145,7 +167,7 @@ class Trainer:
         data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_idx], edge_weights,
                                         self.device)
 
-        return data
+        return data, aux_loss
 
     def train(self,
               dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
@@ -165,11 +187,14 @@ class Trainer:
             data = data.to(self.device)
             self.optimizer.zero_grad()
 
+            aux_loss = None
             if emb_model is not None:
-                data = self.emb_model_forward(data, emb_model, train=True)
+                data, aux_loss = self.emb_model_forward(data, emb_model, train=True)
 
             pred = model(data)
             loss = self.criterion(pred, data.y)
+            if aux_loss is not None:
+                loss += aux_loss
 
             loss.backward()
             train_losses += loss * data.num_graphs
@@ -204,7 +229,7 @@ class Trainer:
                 data = data.to(self.device)
 
                 if emb_model is not None:
-                    data = self.emb_model_forward(data, emb_model, train=False)
+                    data, _ = self.emb_model_forward(data, emb_model, train=False)
 
                 pred = model(data)
                 loss = self.criterion(pred, data.y)

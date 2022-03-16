@@ -1,6 +1,8 @@
 # I-MLE sampling
 Specify `--sample_policy` as well as the following hparams, especially `--train_embd_model` hparams. `--sample_k` can be positive integers as number of nodes / eedge / hops per subgraph or negative number as node / edge deletion.
 
+`--aux_loss_weight` is an optional restriction, it is the strength of loss so that the sampled instances should be different if possible. 
+
 e.g.
 
 Node sample: `python main.py --batch_size 128 --epochs 1000 --sample_policy node --sample_k -1 --num_subgraphs 3 --train_embd_model`

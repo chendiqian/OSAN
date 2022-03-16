@@ -40,6 +40,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
     parser.add_argument('--beta', type=float, default=10.)
+    parser.add_argument('--aux_loss_weight', type=float, default=0.)
 
     # ESAN
     parser.add_argument('--esan_policy', type=str, default='null', choices=['null', 'node_deleted', 'edge_deleted'])
@@ -141,6 +142,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
     trainer = Trainer(task_type=task_type,
                       imle_sample_policy=args.sample_policy,
+                      aux_loss_weight=args.aux_loss_weight,
                       sample_k=args.sample_k,
                       voting=args.voting,
                       max_patience=args.patience,

@@ -26,24 +26,6 @@ Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
-LOGITS_SELECTION = {'node': lambda x, y: x,
-                    'edge': lambda x, y: y,
-                    'khop_subgraph': lambda x, y: x,
-                    'greedy_exp': lambda x, y: x,
-                    'mst': lambda x, y: y, }
-
-SPLIT_IDX_SELECTION = {'node': lambda data: get_split_idx(data.ptr),
-                       'edge': lambda data: get_split_idx(data._slice_dict['edge_index']),
-                       'khop_subgraph': lambda data: get_split_idx(data.ptr),
-                       'greedy_exp': lambda data: get_split_idx(data.ptr),
-                       'mst': lambda data: get_split_idx(data._slice_dict['edge_index']), }
-
-IMLE_SUBGRAPHS_FROM_MASK = {'node': edgemasked_graphs_from_nodemask,
-                            'edge': edgemasked_graphs_from_edgemask,
-                            'khop_subgraph': edgemasked_graphs_from_nodemask,
-                            'greedy_exp': edgemasked_graphs_from_nodemask,
-                            'mst': edgemasked_graphs_from_edgemask}
-
 
 class Trainer:
     def __init__(self,
@@ -128,12 +110,19 @@ class Trainer:
         :param train:
         :return:
         """
-        # select idx for splitting edge / node logits
-        split_idx = SPLIT_IDX_SELECTION[self.imle_sample_policy](data)
-
-        # forward
         logits_n, logits_e = emb_model(data)
-        logits = LOGITS_SELECTION[self.imle_sample_policy](logits_n, logits_e)
+
+        if self.imle_sample_policy in ['node', 'khop_subgraph', 'greedy_exp', 'or']:
+            split_idx = get_split_idx(data.ptr)
+            logits = logits_n
+            subgraphs_from_mask = edgemasked_graphs_from_nodemask
+        elif self.imle_sample_policy in ['edge', 'mst']:
+            split_idx = get_split_idx(data._slice_dict['edge_index'])
+            logits = logits_e
+            subgraphs_from_mask = edgemasked_graphs_from_edgemask
+        else:
+            raise NotImplementedError
+
         graphs = Batch.to_data_list(data)
 
         self.imle_scheduler.graphs = graphs
@@ -158,8 +147,6 @@ class Trainer:
         else:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
 
-        # original graphs
-        subgraphs_from_mask = IMLE_SUBGRAPHS_FROM_MASK[self.imle_sample_policy]
         list_subgraphs, edge_weights = zip(
             *[subgraphs_from_mask(g, i.T, grad=train) for g, i in
               zip(graphs, sample_idx)])

@@ -34,7 +34,7 @@ def get_parse() -> Namespace:
 
     # I-MLE
     parser.add_argument('--sample_policy', type=str, default='node',
-                        choices=['node', 'edge', 'khop_subgraph', 'mst', 'greedy_exp'])
+                        choices=['node', 'edge', 'khop_subgraph', 'mst', 'greedy_exp', 'or'])
     parser.add_argument('--sample_k', type=int, default=-1, help='Instance to be sampled, can be num nodes, num edges '
                                                                  'or k-hop neigbors')
     parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')

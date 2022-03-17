@@ -27,8 +27,9 @@ def solve_or(value_list: List[List[int]], node_per_subgraphs) -> pywraplp.Solver
     objective.SetMaximization()
 
     # coveredness
-    for j in range(n_nodes):
-        solver.Add(sum([x[i][j] for i in range(n_subgraph)]) >= 1)
+    if n_subgraph > 1:
+        for j in range(n_nodes):
+            solver.Add(sum([x[i][j] for i in range(n_subgraph)]) >= 1)
 
     # size of subgraphs
     for i in range(n_subgraph):

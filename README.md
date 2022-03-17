@@ -3,6 +3,11 @@ Specify `--sample_policy` as well as the following hparams, especially `--train_
 
 `--aux_loss_weight` is an optional restriction, it is the strength of loss so that the sampled instances should be different if possible. 
 
+Operational-research-based subgraph sampling method is specific for IMLE sampling. We solve an integer linear programming problem, which includes
+1. Coveredness: the nodes selected for each subgraph should cover the whole graph (if enough nodes to cover)
+2. Size contraint: the nodes selected for each subgraph should be exactly k
+3. Connectedness: Not implemented yet.
+
 e.g.
 
 Node sample: `python main.py --batch_size 128 --epochs 1000 --sample_policy node --sample_k -1 --num_subgraphs 3 --train_embd_model`
@@ -14,6 +19,8 @@ K-hop subgraph sample: `python main.py --batch_size 128 --epochs 1000 --sample_p
 MST subgraph sample: `python main.py --batch_size 128 --epochs 1000 --sample_policy mst --num_subgraphs 5 --train_embd_model`. There is no `sample_k` in this case. 
 
 Greedy expanding tree subgraph: `python main.py --batch_size 128 --epochs 1000 --sample_policy greedy_exp --sample_k 15 --num_subgraphs 5 --train_embd_model`
+
+Operational research based subgraph: `python main.py --batch_size 128 --epochs 1000 --sample_policy or --sample_k 15 --num_subgraphs 5 --train_embd_model`
 
 # ESAN
 Specify `--esan_policy` as `node_deletion` or else. `--sample_mode` is to sample from the _deck_ of subgraph set with ratio or fixed number of subgraphs. `--esan_frac` is the ratio, `--esan_k` is the fixed number, depending on `--sample_mode`. `--voting` is for inference as [here](https://github.com/beabevi/ESAN/blob/98b6c346e8bca77db1597f88bac78178871e652c/main.py#L121), but can be used for other settings as well. 

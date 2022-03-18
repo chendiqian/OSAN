@@ -1,5 +1,6 @@
 import itertools
 import os
+import pdb
 import pickle
 from collections import defaultdict
 from typing import Union,Optional
@@ -58,7 +59,6 @@ class Trainer:
         """
         super(Trainer, self).__init__()
 
-        assert task_type == 'regression', "Does not support tasks other than regression"
         self.task_type = task_type
         self.voting = voting
         self.imle_sample_policy = imle_sample_policy
@@ -70,6 +70,7 @@ class Trainer:
         self.device = device
 
         self.best_val_loss = 1e5
+        self.best_val_acc = 0.
         self.patience = 0
         self.max_patience = max_patience
 
@@ -168,6 +169,9 @@ class Trainer:
 
         model.train()
         train_losses = torch.tensor(0., device=self.device)
+        if self.task_type == 'classification':
+            preds = []
+            labels = []
         num_graphs = 0
 
         for data in dataloader:
@@ -179,23 +183,34 @@ class Trainer:
                 data, aux_loss = self.emb_model_forward(data, emb_model, train=True)
 
             pred = model(data)
-            loss = self.criterion(pred, data.y)
+            loss = self.criterion(pred, data.y.to(torch.float))
             if aux_loss is not None:
                 loss += aux_loss
 
             loss.backward()
             train_losses += loss * data.num_graphs
             num_graphs += data.num_graphs
+            if self.task_type == 'classification':
+                preds.append(pred)
+                labels.append(data.y)
             self.optimizer.step()
 
+        if self.task_type == 'classification':
+            preds = torch.cat(preds, dim=0) > 0.
+            labels = torch.cat(labels, dim=0)
+            train_acc = ((preds == labels).sum() / labels.numel()).item()
+            self.curves['train_acc'].append(train_acc)
+        else:
+            train_acc = None
+
         train_loss = train_losses.item() / num_graphs
-        self.curves['train'].append(train_loss)
+        self.curves['train_loss'].append(train_loss)
 
         if emb_model is not None:
             del self.imle_scheduler.graphs
             del self.imle_scheduler.ptr
 
-        return train_loss
+        return train_loss, train_acc
 
     @torch.no_grad()
     def validation(self,
@@ -209,6 +224,9 @@ class Trainer:
 
         model.eval()
         val_losses = torch.tensor(0., device=self.device)
+        if self.task_type == 'classification':
+            preds = []
+            labels = []
         num_graphs = 0
 
         for v in range(self.voting):
@@ -219,10 +237,22 @@ class Trainer:
                     data, _ = self.emb_model_forward(data, emb_model, train=False)
 
                 pred = model(data)
-                loss = self.criterion(pred, data.y)
+                loss = self.criterion(pred, data.y.to(torch.float))
 
                 val_losses += loss * data.num_graphs
+                if self.task_type == 'classification':
+                    preds.append(pred)
+                    labels.append(data.y)
                 num_graphs += data.num_graphs
+
+        if self.task_type == 'classification':
+            preds = torch.cat(preds, dim=0) > 0.
+            labels = torch.cat(labels, dim=0)
+            val_acc = ((preds == labels).sum() / labels.numel()).item()
+            self.curves['val_acc'].append(val_acc)
+            self.best_val_acc = max(self.best_val_acc, val_acc)
+        else:
+            val_acc = None
 
         val_loss = val_losses.item() / num_graphs
         self.scheduler.step(val_loss)
@@ -236,13 +266,13 @@ class Trainer:
             if self.patience > self.max_patience:
                 early_stop = True
 
-        self.curves['val'].append(val_loss)
+        self.curves['val_loss'].append(val_loss)
 
         if emb_model is not None:
             del self.imle_scheduler.graphs
             del self.imle_scheduler.ptr
 
-        return val_loss, early_stop
+        return val_loss, val_acc, early_stop
 
     def save_curve(self, path):
         pickle.dump(self.curves, open(os.path.join(path, 'curves.pkl'), "wb"))

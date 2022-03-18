@@ -73,6 +73,30 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
         #                            subgraph_loader=pre_transform is not None)
         val_loader = MYDataLoader(dataset[225011:][val_indices], batch_size=args.batch_size, shuffle=False,
                                   subgraph_loader=sample_collator)
+    elif args.dataset.lower() == 'mutag':
+        if not os.path.isdir(args.data_path):
+            os.mkdir(args.data_path)
+
+        pre_transform = policy2transform(args.esan_policy)
+
+        if args.esan_policy == 'null':   # I-MLE, or normal training, or sample on the fly
+            transform = None
+            if (not args.train_embd_model) and (args.num_subgraphs > 0):   # sample-on-the-fly
+                transform = TRANSFORM_DICT[args.sample_policy](args.num_subgraphs, args.sample_k)
+            dataset = TUDataset(args.data_path, transform=transform, name="MUTAG", pre_transform=pre_transform)
+        else:   # ESAN: sample from the deck
+            transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)
+            dataset = CustomTUDataset(args.data_path + f'/deck/{args.esan_policy}', name="MUTAG",
+                                      transform=transform, pre_transform=pre_transform)
+
+        sample_collator = (args.esan_policy != 'null') or ((not args.train_embd_model) and (args.num_subgraphs > 0))
+
+        train_loader = MYDataLoader(dataset[:150] if not args.debug else dataset[:16], batch_size=args.batch_size,
+                                    shuffle=True, subgraph_loader=sample_collator)
+        # test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=batch_size, shuffle=False,
+        #                            subgraph_loader=pre_transform is not None)
+        val_loader = MYDataLoader(dataset[150:169], batch_size=args.batch_size, shuffle=False,
+                                  subgraph_loader=sample_collator)
     else:
         raise NotImplementedError
 

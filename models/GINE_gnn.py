@@ -34,7 +34,14 @@ class GINEConv(MessagePassing):
 
 
 class NetGINE(torch.nn.Module):
-    def __init__(self, input_dims, edge_features, dim, dropout, num_convlayers, use_bias=True, jk=None):
+    def __init__(self, input_dims,
+                 edge_features,
+                 dim,
+                 dropout,
+                 num_convlayers,
+                 use_bias=True,
+                 jk=None,
+                 num_class=None):
         super(NetGINE, self).__init__()
 
         self.dropout = dropout
@@ -57,14 +64,16 @@ class NetGINE(torch.nn.Module):
 
         self.fc2 = Linear(dim, dim)
         self.fc3 = Linear(dim, dim)
-        self.fc4 = Linear(dim, 1)
+        if num_class is None or num_class == 2:
+            self.fc4 = Linear(dim, 1)
+        else:
+            self.fc4 = Linear(dim, num_class)
 
     def forward(self, data):
         x, edge_index, edge_attr, edge_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight
         batch = data.batch if hasattr(data, 'batch') and data.batch is not None \
             else torch.zeros(x.shape[0], dtype=torch.long)
 
-        # TODO: try residual
         intermediate_x = [] if self.jk == 'concat' else None
         for i, (conv, bn) in enumerate(zip(self.conv, self.bn)):
             x_new = conv(x, edge_index, edge_attr, edge_weight)
@@ -84,4 +93,6 @@ class NetGINE(torch.nn.Module):
         if hasattr(data, 'inter_graph_idx') and data.inter_graph_idx is not None:
             x = global_mean_pool(x, data.inter_graph_idx)
         x = self.fc4(x)
-        return x.view(-1)
+        if x.shape[-1] == 1:
+            x = x.reshape(-1)
+        return x

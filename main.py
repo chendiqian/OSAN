@@ -70,7 +70,8 @@ def get_logger(folder_path: str) -> Logger:
 
 
 def naming(args: Namespace) -> str:
-    name = f'hid_{args.hid_size}_' \
+    name = f'{args.dataset}_' \
+           f'hid_{args.hid_size}_' \
            f'lr_{args.lr}_' \
            f'lr_patience_{args.lr_patience}_' \
            f'dp_{args.dropout}_' \
@@ -102,6 +103,10 @@ if __name__ == '__main__':
 
     if args.dataset.lower() in ['zinc']:
         task_type = 'regression'
+        criterion = torch.nn.L1Loss()
+    elif args.dataset.lower() in ['mutag']:
+        task_type = 'classification'
+        criterion = torch.nn.BCEWithLogitsLoss()
     else:
         raise NotImplementedError
 
@@ -125,7 +130,8 @@ if __name__ == '__main__':
                         args.hid_size,
                         args.dropout,
                         args.num_convlayers,
-                        jk=args.gnn_jk).to(device)
+                        jk=args.gnn_jk,
+                        num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
     else:
         raise NotImplementedError
 
@@ -151,14 +157,14 @@ if __name__ == '__main__':
                                                                            factor=0.316227766,
                                                                            patience=args.lr_patience,
                                                                            min_lr=1e-5),
-                      criterion=torch.nn.L1Loss(),
+                      criterion=criterion,
                       train_embd_model=args.train_embd_model,
                       beta=args.beta,
                       device=device)
 
     for epoch in range(args.epochs):
-        train_loss = trainer.train(train_loader, emb_model, model)
-        val_loss, early_stop = trainer.validation(val_loader, emb_model, model)
+        train_loss, train_acc = trainer.train(train_loader, emb_model, model)
+        val_loss, val_acc, early_stop = trainer.validation(val_loader, emb_model, model)
 
         if early_stop:
             logger.info('early stopping')
@@ -167,9 +173,15 @@ if __name__ == '__main__':
         logger.info(f'epoch: {epoch}, '
                     f'training loss: {train_loss}, '
                     f'val loss: {val_loss}, '
-                    f'patience: {trainer.patience}')
+                    f'patience: {trainer.patience}, '
+                    f'training acc: {train_acc}, '
+                    f'val acc: {val_acc}')
         writer.add_scalar('loss/training loss', train_loss, epoch)
         writer.add_scalar('loss/val loss', val_loss, epoch)
+        if train_acc is not None:
+            writer.add_scalar('acc/training acc', train_acc, epoch)
+        if val_acc is not None:
+            writer.add_scalar('acc/valacc', val_acc, epoch)
         writer.add_scalar('lr', trainer.scheduler.optimizer.param_groups[0]['lr'], epoch)
 
         if epoch % args.save_freq == 0:
@@ -178,4 +190,5 @@ if __name__ == '__main__':
                 torch.save(emb_model.state_dict(), f'{folder_name}/embd_model{epoch}.pt')
 
     logger.info(f'Best val loss: {trainer.best_val_loss}')
+    logger.info(f'Best val acc: {trainer.best_val_acc}')
     trainer.save_curve(folder_name)

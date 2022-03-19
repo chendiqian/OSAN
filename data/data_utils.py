@@ -84,3 +84,19 @@ def edgeindex2neighbordict(edge_index: torch.Tensor, num_nodes: int, num_edges: 
     neighbor_idx_dict[num_nodes - 1] = range(mask[-1], num_edges)
     neighbor_dict[num_nodes - 1] = cols[mask[-1]:]
     return neighbor_idx_dict, neighbor_dict
+
+
+def get_ptr(graph_idx: Tensor, device: torch.device = None) -> Tensor:
+    """
+    Given indices of graph, return ptr
+    e.g. [1,1,2,2,2,3,3,4] -> [0, 2, 5, 7]
+
+    :param graph_idx:
+    :param device:
+    :return:
+    """
+    if device is None:
+        device = graph_idx.device
+    return torch.cat((torch.tensor([0], device=device),
+                      (graph_idx[1:] > graph_idx[:-1]).nonzero().reshape(-1) + 1,
+                      torch.tensor([len(graph_idx)], device=device)), dim=0)

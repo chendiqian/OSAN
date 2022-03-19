@@ -6,6 +6,7 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.utils import subgraph
 
 from data import SubgraphSetBatch
+from data.data_utils import get_ptr
 from subgraph.grad_utils import Nodemask2Edgemask, nodemask2edgemask
 
 
@@ -50,20 +51,6 @@ def edgemasked_graphs_from_edgemask(graph: Data, masks: Tensor, grad=True) -> Tu
     edge_weights = masks.reshape(-1)
     graphs = [graph] * masks.shape[0]
     return graphs, edge_weights
-
-
-def get_ptr(graph_idx: Tensor, device: torch.device) -> Tensor:
-    """
-    Given indices of graph, return ptr
-    e.g. [1,1,2,2,2,3,3,4] -> [0, 2, 5, 7]
-
-    :param graph_idx:
-    :param device:
-    :return:
-    """
-    return torch.cat((torch.tensor([0], device=device),
-                      (graph_idx[1:] > graph_idx[:-1]).nonzero().reshape(-1) + 1,
-                      torch.tensor([len(graph_idx)], device=device)), dim=0)
 
 
 def construct_subgraph_batch(graph_list: List[Data],

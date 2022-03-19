@@ -75,6 +75,6 @@ def get_or_optim_subgraphs(value_tensor: torch.Tensor, node_per_subgraphs: int) 
     solution = torch.zeros_like(value_tensor, dtype=torch.float32, device=value_tensor.device)
     for i in range(n_subgraph):
         for j in range(n_nodes):
-            solution[j, i] = x[i * n_subgraph + j].solution_value()
+            solution[j, i] = x[i * n_nodes + j].solution_value()
 
     return solution

@@ -1,6 +1,8 @@
 from collections import namedtuple
-from typing import Dict, Union, Tuple
+from typing import List
 
+import numba
+import numpy as np
 import torch
 from torch import Tensor
 from torch import device as TorchDevice
@@ -62,28 +64,21 @@ class GraphToUndirected:
                     num_nodes=graph.num_nodes)
 
 
-def edgeindex2neighbordict(edge_index: torch.Tensor, num_nodes: int, num_edges: int) \
-        -> Tuple[Dict[int, range], Dict[int, Tuple]]:
+@numba.njit(cache=True)
+def edgeindex2neighbordict(edge_index: np.ndarray, num_nodes: int) -> List[List[int]]:
     """
 
-    :param edge_index:
+    :param edge_index: shape (2, E)
     :param num_nodes:
-    :param num_edges:
     :return:
     """
-    assert edge_index[0][0] == 0 and edge_index[0][-1] == num_nodes - 1
-    mask = (torch.where(edge_index[0, 1:] > edge_index[0, :-1])[0] + 1).cpu().tolist()
-    cols = tuple(edge_index[1].cpu().tolist())
+    neighbors = [[-1] for _ in range(num_nodes)]
+    for i, node in enumerate(edge_index[0]):
+        neighbors[node].append(edge_index[1][i])
 
-    neighbor_idx_dict = {0: range(mask[0])}
-    neighbor_dict = {0: cols[0: mask[0]]}
-
-    for i in range(len(mask) - 1):
-        neighbor_idx_dict[i + 1] = range(mask[i], mask[i + 1])
-        neighbor_dict[i + 1] = cols[mask[i]: mask[i + 1]]
-    neighbor_idx_dict[num_nodes - 1] = range(mask[-1], num_edges)
-    neighbor_dict[num_nodes - 1] = cols[mask[-1]:]
-    return neighbor_idx_dict, neighbor_dict
+    for i, n in enumerate(neighbors):
+        n.pop(0)
+    return neighbors
 
 
 def get_ptr(graph_idx: Tensor, device: torch.device = None) -> Tensor:

@@ -113,7 +113,7 @@ class Trainer:
         """
         logits_n, logits_e = emb_model(data)
 
-        if self.imle_sample_policy in ['node', 'khop_subgraph', 'greedy_exp', 'or']:
+        if self.imle_sample_policy in ['node', 'khop_subgraph', 'greedy_exp', 'or', 'or_optim']:
             split_idx = get_split_idx(data.ptr)
             logits = logits_n
             subgraphs_from_mask = edgemasked_graphs_from_nodemask

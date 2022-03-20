@@ -5,7 +5,7 @@ import torch
 from subgraph.khop_subgraph import khop_subgraphs
 from subgraph.greedy_expanding_tree import greedy_expand_tree
 from subgraph.mst_subgraph import mst_subgraph_sampling
-from subgraph.or_optimal_subgraph import get_or_optim_subgraphs
+from subgraph.or_optimal_subgraph import get_or_suboptim_subgraphs, get_or_optim_subgraphs
 
 
 def get_split_idx(inc_tensor: torch.Tensor) -> Tuple:
@@ -91,7 +91,9 @@ class IMLEScheme:
             elif self.imle_sample_policy == 'greedy_exp':
                 mask = greedy_expand_tree(self.graphs[i], logit, self.sample_k).T
             elif self.imle_sample_policy == 'or':
-                mask = get_or_optim_subgraphs(logit, self.sample_k)
+                mask = get_or_suboptim_subgraphs(logit, self.sample_k)
+            elif self.imle_sample_policy == 'or_optim':
+                mask = get_or_optim_subgraphs(self.graphs[i], logit, self.sample_k)
             else:
                 raise NotImplementedError
 

@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, deque
 from typing import List
 
 import numba
@@ -95,3 +95,28 @@ def get_ptr(graph_idx: Tensor, device: torch.device = None) -> Tensor:
     return torch.cat((torch.tensor([0], device=device),
                       (graph_idx[1:] > graph_idx[:-1]).nonzero().reshape(-1) + 1,
                       torch.tensor([len(graph_idx)], device=device)), dim=0)
+
+
+def get_connected_components(subset, neighbor_dict):
+    components = []
+
+    while subset:
+        cur_node = subset.pop()
+        q = deque()
+        q.append(cur_node)
+
+        component = [cur_node]
+        while q:
+            cur_node = q.popleft()
+            i = 0
+            while i < len(subset):
+                candidate = subset[i]
+                if candidate in neighbor_dict[cur_node]:
+                    subset.pop(i)
+                    component.append(candidate)
+                    q.append(candidate)
+                else:
+                    i += 1
+        components.append(component)
+
+    return components

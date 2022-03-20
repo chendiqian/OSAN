@@ -192,5 +192,5 @@ def get_or_optim_subgraphs(graph, value_tensor, node_per_subgraphs, verbose=Fals
         if early_break:
             break
 
-    solution = get_solution_as_tensor(x)
+    solution = get_solution_as_tensor(x, value_tensor.device)
     return solution.T

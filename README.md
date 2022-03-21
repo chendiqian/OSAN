@@ -3,6 +3,12 @@ Specify `--sample_policy` as well as the following hparams, especially `--train_
 
 `--aux_loss_weight` is an optional restriction, it is the strength of loss so that the sampled instances should be different if possible. 
 
+`--remove_node` and `--add_full_graph` are options for ALL the sampling methods.
+
+`--remove_node` is for node-based methods, if `remove node`, then the discarded nodes are masked out during the graph pooling, i.e. their node features are not incorporated. 
+
+If `add_full_graph`, the original graph is also added into the batch. 
+
 Operational-research-based subgraph sampling method is specific for IMLE sampling. We solve an integer linear programming problem, which includes
 1. Coveredness: the nodes selected for each subgraph should cover the whole graph (if enough nodes to cover)
 2. Size contraint: the nodes selected for each subgraph should be exactly k

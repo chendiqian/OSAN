@@ -36,6 +36,7 @@ def get_parse() -> Namespace:
                                                                    'masks, otherwise keep the nodes for forward pass '
                                                                    'and graph pooling. Only works for node-based '
                                                                    'sampling methods. ')
+    parser.add_argument('--add_full_graph', action='store_true', help='if true, add the original graph into the batch')
 
     # I-MLE
     parser.add_argument('--sample_policy', type=str, default='node',
@@ -156,6 +157,7 @@ if __name__ == '__main__':
                       aux_loss_weight=args.aux_loss_weight,
                       sample_k=args.sample_k,
                       remove_node=args.remove_node,
+                      add_full_graph=args.add_full_graph,
                       voting=args.voting,
                       max_patience=args.patience,
                       optimizer=optimizer,

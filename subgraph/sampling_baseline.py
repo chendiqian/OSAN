@@ -14,7 +14,8 @@ from subgraph.greedy_expanding_tree import numba_greedy_expand_tree
 def node_rand_sampling(graph: Data,
                        n_subgraphs: int,
                        node_per_subgraph: int = -1,
-                       relabel: bool = False) -> List[Data]:
+                       relabel: bool = False,
+                       add_full_graph: bool = False) -> List[Data]:
     """
     Sample subgraphs.
 
@@ -22,6 +23,7 @@ def node_rand_sampling(graph: Data,
     :param n_subgraphs:
     :param node_per_subgraph:
     :param relabel:
+    :param add_full_graph:
     :return:
         A list of graphs and their index masks
     """
@@ -30,7 +32,7 @@ def node_rand_sampling(graph: Data,
     if node_per_subgraph < 0:  # drop nodes
         node_per_subgraph += n_nodes
 
-    graphs = []
+    graphs = [graph] if add_full_graph else []
     for i in range(n_subgraphs):
         indices = torch.randperm(n_nodes)[:node_per_subgraph]
         sort_indices = torch.sort(indices).values
@@ -39,12 +41,16 @@ def node_rand_sampling(graph: Data,
     return graphs
 
 
-def edge_rand_sampling(graph: Data, n_subgraphs: int, edge_per_subgraph: int = -1) -> List[Data]:
+def edge_rand_sampling(graph: Data,
+                       n_subgraphs: int,
+                       edge_per_subgraph: int = -1,
+                       add_full_graph: bool = False) -> List[Data]:
     """
 
     :param graph:
     :param n_subgraphs:
     :param edge_per_subgraph:
+    :param add_full_graph:
     :return:
     """
     edge_index, edge_attr, undirected = edge_sample_preproc(graph)
@@ -56,7 +62,7 @@ def edge_rand_sampling(graph: Data, n_subgraphs: int, edge_per_subgraph: int = -
     if edge_per_subgraph < 0:  # drop edges
         edge_per_subgraph += n_edge
 
-    graphs = []
+    graphs = [graph] if add_full_graph else []
     for i in range(n_subgraphs):
         indices = torch.randperm(n_edge)[:edge_per_subgraph]
         sort_indices = torch.sort(indices).values
@@ -107,7 +113,11 @@ def edge_sample_preproc(data: Data) -> Tuple[LongTensor, Tensor, bool]:
     return edge_index, edge_attr, undirected
 
 
-def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3, relabel: bool = False) -> List[Data]:
+def khop_subgraph_sampling(data: Data,
+                           n_subgraphs: int,
+                           khop: int = 3,
+                           relabel: bool = False,
+                           add_full_graph: bool = False) -> List[Data]:
     """
     Sample the k-hop-neighbors subgraphs randomly
 
@@ -115,10 +125,11 @@ def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3, relabel:
     :param n_subgraphs:
     :param khop:
     :param relabel:
+    :param add_full_graph:
     :return:
     """
     sample_indices = random.sample(range(data.num_nodes), n_subgraphs)
-    graphs = []
+    graphs = [data] if add_full_graph else []
 
     for idx in sample_indices:
         node_idx, edge_index, _, edge_mask = k_hop_subgraph(idx,
@@ -135,8 +146,15 @@ def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3, relabel:
     return graphs
 
 
-def max_spanning_tree_subgraph(data: Data, n_subgraphs: int) -> List[Data]:
-    graphs = []
+def max_spanning_tree_subgraph(data: Data, n_subgraphs: int, add_full_graph: bool = False) -> List[Data]:
+    """
+
+    :param data:
+    :param n_subgraphs:
+    :param add_full_graph:
+    :return:
+    """
+    graphs = [data] if add_full_graph else []
     np_edge_index = data.edge_index.cpu().numpy().T
     for i in range(n_subgraphs):
         edge_mask = kruskal_max_span_tree(np_edge_index, None, data.num_nodes)
@@ -148,21 +166,25 @@ def max_spanning_tree_subgraph(data: Data, n_subgraphs: int) -> List[Data]:
     return graphs
 
 
-def greedy_expand_sampling(graph: Data, n_subgraphs: int, node_per_subgraph: int = -1, relabel: bool = False)\
-        -> List[Data]:
+def greedy_expand_sampling(graph: Data,
+                           n_subgraphs: int,
+                           node_per_subgraph: int = -1,
+                           relabel: bool = False,
+                           add_full_graph: bool = False) -> List[Data]:
     """
 
     :param graph:
     :param n_subgraphs:
     :param node_per_subgraph:
     :param relabel:
+    :param add_full_graph:
     :return:
     """
     if node_per_subgraph >= graph.num_nodes:
         return [graph] * n_subgraphs
 
     edge_index = graph.edge_index.cpu().numpy()
-    graphs = []
+    graphs = [graph] if add_full_graph else []
     for _ in range(n_subgraphs):
         node_mask = numba_greedy_expand_tree(edge_index, node_per_subgraph, None, graph.num_nodes, repeat=1)
         graphs.append(nodesubset_to_subgraph(graph, torch.from_numpy(node_mask).sort().values, relabel=relabel))

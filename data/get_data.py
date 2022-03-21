@@ -30,12 +30,18 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
         if not os.path.isdir(args.data_path):
             os.mkdir(args.data_path)
 
-        pre_transform = Compose([GraphToUndirected(), policy2transform(args.esan_policy, relabel=args.remove_node)])
+        pre_transform = Compose([GraphToUndirected(),
+                                 policy2transform(args.esan_policy,
+                                                  relabel=args.remove_node,
+                                                  add_full_graph=args.add_full_graph)])
 
         if args.esan_policy == 'null':   # I-MLE, or normal training, or sample on the fly
             transform = None
             if (not args.train_embd_model) and (args.num_subgraphs > 0):   # sample-on-the-fly
-                transform = TRANSFORM_DICT[args.sample_policy](args.num_subgraphs, args.sample_k, args.remove_node)
+                transform = TRANSFORM_DICT[args.sample_policy](args.num_subgraphs,
+                                                               args.sample_k,
+                                                               args.remove_node,
+                                                               args.add_full_graph)
             dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full", pre_transform=pre_transform)
         else:   # ESAN: sample from the deck
             transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)
@@ -77,12 +83,17 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
         if not os.path.isdir(args.data_path):
             os.mkdir(args.data_path)
 
-        pre_transform = policy2transform(args.esan_policy, relabel=args.remove_node)
+        pre_transform = policy2transform(args.esan_policy,
+                                         relabel=args.remove_node,
+                                         add_full_graph=args.add_full_graph)
 
         if args.esan_policy == 'null':   # I-MLE, or normal training, or sample on the fly
             transform = None
             if (not args.train_embd_model) and (args.num_subgraphs > 0):   # sample-on-the-fly
-                transform = TRANSFORM_DICT[args.sample_policy](args.num_subgraphs, args.sample_k, args.remove_node)
+                transform = TRANSFORM_DICT[args.sample_policy](args.num_subgraphs,
+                                                               args.sample_k,
+                                                               args.remove_node,
+                                                               args.add_full_graph)
             dataset = TUDataset(args.data_path, transform=transform, name="MUTAG", pre_transform=pre_transform)
         else:   # ESAN: sample from the deck
             transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)

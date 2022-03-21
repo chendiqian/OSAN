@@ -16,7 +16,10 @@ from subgraph.sampling_baseline import node_rand_sampling, edge_rand_sampling, e
 
 
 class SamplerOnTheFly:
-    def __init__(self, n_subgraphs: int = 1, sample_k: Optional[int] = None, remove_node: bool = False):
+    def __init__(self, n_subgraphs: int = 1,
+                 sample_k: Optional[int] = None,
+                 remove_node: bool = False,
+                 add_full_graph: bool = False):
         """
         Sample from a single graph, to create a batch of subgraphs.
         Especially suitable for situations where the deck is too large and inefficient.
@@ -24,11 +27,13 @@ class SamplerOnTheFly:
         :param n_subgraphs:
         :param sample_k: nodes / edges per subgraphs
         :param remove_node:
+        :param add_full_graph:
         """
         super(SamplerOnTheFly, self).__init__()
         self.n_subgraphs = n_subgraphs
         self.sample_k = sample_k
         self.relabel = remove_node
+        self.add_full_graph = add_full_graph
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError
@@ -36,31 +41,31 @@ class SamplerOnTheFly:
 
 class RawNodeSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = node_rand_sampling(data, self.n_subgraphs, self.sample_k, self.relabel)
+        subgraphs = node_rand_sampling(data, self.n_subgraphs, self.sample_k, self.relabel, self.add_full_graph)
         return subgraphs
 
 
 class RawEdgeSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = edge_rand_sampling(data, self.n_subgraphs, self.sample_k)
+        subgraphs = edge_rand_sampling(data, self.n_subgraphs, self.sample_k, self.add_full_graph)
         return subgraphs
 
 
 class RawKhopSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = khop_subgraph_sampling(data, self.n_subgraphs, self.sample_k, self.relabel)
+        subgraphs = khop_subgraph_sampling(data, self.n_subgraphs, self.sample_k, self.relabel, self.add_full_graph)
         return subgraphs
 
 
 class RawGreedyExpand(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = greedy_expand_sampling(data, self.n_subgraphs, self.sample_k, self.relabel)
+        subgraphs = greedy_expand_sampling(data, self.n_subgraphs, self.sample_k, self.relabel, self.add_full_graph)
         return subgraphs
 
 
 class RawMSTSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = max_spanning_tree_subgraph(data, self.n_subgraphs)
+        subgraphs = max_spanning_tree_subgraph(data, self.n_subgraphs, self.add_full_graph)
         return subgraphs
 
 
@@ -86,9 +91,10 @@ class DeckSampler:
 
 
 class Graph2Subgraph:
-    def __init__(self, process_subgraphs: Callable = None, remove_node: bool = False):
+    def __init__(self, process_subgraphs: Callable = None, remove_node: bool = False, add_full_graph: bool = True):
         self.process_subgraphs = process_subgraphs
         self.relabel = remove_node
+        self.add_full_graph = add_full_graph
 
     def __call__(self, data: Data) -> List[Data]:
         subgraphs = self.to_subgraphs(data)
@@ -113,7 +119,7 @@ class NodeDeleted(Graph2Subgraph):
         :param data:
         :return:
         """
-        subgraphs = []
+        subgraphs = [data] if self.add_full_graph else []
         all_nodes = torch.arange(data.num_nodes)
 
         for i in range(data.num_nodes):
@@ -130,7 +136,7 @@ class EdgeDeleted(Graph2Subgraph):
 
         edge_index, edge_attr, undirected = edge_sample_preproc(data)
 
-        subgraphs = []
+        subgraphs = [data] if self.add_full_graph else []
         for i in range(edge_index.shape[1]):
             subgraph_edge_index = torch.hstack([edge_index[:, :i], edge_index[:, i + 1:]])
             subgraph_edge_attr = torch.vstack([edge_attr[:i], edge_attr[i + 1:]]) if edge_attr is not None else None
@@ -154,7 +160,10 @@ class EdgeDeleted(Graph2Subgraph):
         return subgraphs
 
 
-def policy2transform(policy: str, process_subgraphs: Callable = None, relabel: bool = False) -> Union[Graph2Subgraph, Callable]:
+def policy2transform(policy: str,
+                     process_subgraphs: Callable = None,
+                     relabel: bool = False,
+                     add_full_graph: bool = True) -> Union[Graph2Subgraph, Callable]:
     """
     Pre-transform for datasets
     e.g. make a deck of subgraphs for the original graph, each with size n - 1
@@ -162,12 +171,13 @@ def policy2transform(policy: str, process_subgraphs: Callable = None, relabel: b
     :param policy:
     :param process_subgraphs:
     :param relabel:
+    :param add_full_graph:
     :return:
     """
     if policy == "node_deleted":
-        return NodeDeleted(process_subgraphs=process_subgraphs, remove_node=relabel)
+        return NodeDeleted(process_subgraphs=process_subgraphs, remove_node=relabel, add_full_graph=add_full_graph)
     elif policy == 'edge_deleted':
-        return EdgeDeleted(process_subgraphs=process_subgraphs)
+        return EdgeDeleted(process_subgraphs=process_subgraphs, add_full_graph=add_full_graph)
     elif policy == 'null':
         return lambda x: x
     else:

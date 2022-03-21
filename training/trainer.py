@@ -154,7 +154,10 @@ class Trainer:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
 
         list_list_subgraphs, edge_weights, selected_node_masks = zip(
-            *[subgraphs_from_mask(g, i.T, grad=train, add_full_graph=self.add_full_graph) for g, i in
+            *[subgraphs_from_mask(g, i.T,
+                                  grad=train,
+                                  remove_node=self.remove_node,
+                                  add_full_graph=self.add_full_graph) for g, i in
               zip(graphs, sample_idx)])
         list_subgraphs = list(itertools.chain.from_iterable(list_list_subgraphs))
         data = construct_subgraph_batch(list_subgraphs,

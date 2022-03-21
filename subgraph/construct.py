@@ -30,14 +30,19 @@ def nodesubset_to_subgraph(graph: Data, subset: Tensor, relabel=False) -> Data:
                 y=graph.y)
 
 
-def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True, add_full_graph: bool = False) \
-        -> Tuple[List[Data], Tensor, Tensor]:
+def edgemasked_graphs_from_nodemask(graph: Data,
+                                    masks: Tensor,
+                                    grad=True,
+                                    remove_node: bool = False,
+                                    add_full_graph: bool = False) \
+        -> Tuple[List[Data], Tensor, Optional[Tensor]]:
     """
     Create edge_weights which contain the back-propagated gradients
 
     :param graph:
     :param masks: shape (n_subgraphs, n_node_in_original_graph,) node masks
     :param grad: whether to contain gradient info
+    :param remove_node:
     :param add_full_graph:
     :return:
     """
@@ -50,16 +55,21 @@ def edgemasked_graphs_from_nodemask(graph: Data, masks: Tensor, grad=True, add_f
                                   torch.ones(1, edge_weights.shape[1],
                                              dtype=edge_weights.dtype,
                                              device=edge_weights.device)), dim=0)
-        masks = torch.cat((masks,
-                           torch.ones(1, masks.shape[1],
-                                      dtype=masks.dtype,
-                                      device=masks.device)), dim=0)
+        if remove_node:
+            masks = torch.cat((masks,
+                               torch.ones(1, masks.shape[1],
+                                          dtype=masks.dtype,
+                                          device=masks.device)), dim=0)
     edge_weights = edge_weights.reshape(-1)
-    selected_node_masks = masks.reshape(-1).to(torch.bool)
+    selected_node_masks = masks.reshape(-1).to(torch.bool) if remove_node else None
     return graphs, edge_weights, selected_node_masks
 
 
-def edgemasked_graphs_from_edgemask(graph: Data, masks: Tensor, grad: bool = True, add_full_graph: bool = False) \
+def edgemasked_graphs_from_edgemask(graph: Data,
+                                    masks: Tensor,
+                                    grad: bool = True,
+                                    remove_node: bool = False,
+                                    add_full_graph: bool = False) \
         -> Tuple[List[Data], Tensor, Optional[Tensor]]:
     """
     Create edge_weights which contain the back-propagated gradients
@@ -67,6 +77,7 @@ def edgemasked_graphs_from_edgemask(graph: Data, masks: Tensor, grad: bool = Tru
     :param graph:
     :param masks: shape (n_subgraphs, n_edge_in_original_graph,) edge masks
     :param grad: whether to contain gradient info
+    :param remove_node:
     :param add_full_graph:
     :return:
     """
@@ -107,7 +118,7 @@ def construct_subgraph_batch(graph_list: List[Data],
     #  need to check `batch._slice_dict` and `batch._inc_dict`
 
     batch_idx = batch.batch
-    if selected_node_masks is not None:
+    if selected_node_masks[0] is not None:
         selected_node_masks = torch.cat(selected_node_masks, dim=0) if isinstance(selected_node_masks, (list, tuple)) \
             else selected_node_masks
 
@@ -117,9 +128,13 @@ def construct_subgraph_batch(graph_list: List[Data],
             batch_idx = batch.batch[selected_node_masks]
         else:
             raise ValueError
+    else:
+        selected_node_masks = None
 
-    if edge_weights is not None:
+    if edge_weights[0] is not None:
         edge_weights = torch.cat(edge_weights, dim=0) if isinstance(edge_weights, (list, tuple)) else edge_weights
+    else:
+        edge_weights = None
 
     return SubgraphSetBatch(x=batch.x,
                             edge_index=batch.edge_index,

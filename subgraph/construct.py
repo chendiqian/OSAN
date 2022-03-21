@@ -61,7 +61,7 @@ def edgemasked_graphs_from_nodemask(graph: Data,
                                           dtype=masks.dtype,
                                           device=masks.device)), dim=0)
     edge_weights = edge_weights.reshape(-1)
-    selected_node_masks = masks.reshape(-1).to(torch.bool) if remove_node else None
+    selected_node_masks = masks.reshape(-1) if remove_node else None
     return graphs, edge_weights, selected_node_masks
 
 

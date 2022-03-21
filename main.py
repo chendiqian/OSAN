@@ -32,6 +32,11 @@ def get_parse() -> Namespace:
     parser.add_argument('--log_path', type=str, default='./logs')
     parser.add_argument('--save_freq', type=int, default=100)
 
+    parser.add_argument('--remove_node', action='store_true', help='if true, the nodes are discarded wrt node '
+                                                                   'masks, otherwise keep the nodes for forward pass '
+                                                                   'and graph pooling. Only works for node-based '
+                                                                   'sampling methods. ')
+
     # I-MLE
     parser.add_argument('--sample_policy', type=str, default='node',
                         choices=['node', 'edge', 'khop_subgraph', 'mst', 'greedy_exp', 'or', 'or_optim'])
@@ -150,6 +155,7 @@ if __name__ == '__main__':
                       imle_sample_policy=args.sample_policy,
                       aux_loss_weight=args.aux_loss_weight,
                       sample_k=args.sample_k,
+                      remove_node=args.remove_node,
                       voting=args.voting,
                       max_patience=args.patience,
                       optimizer=optimizer,

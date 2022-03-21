@@ -1,12 +1,10 @@
-from typing import List, Optional, Union, Tuple
-from functools import partial
+from typing import List, Optional, Union
 import itertools
 
 import torch
-from torch import Tensor
 from torch.utils.data.dataloader import default_collate
 from torch_geometric.loader.dataloader import Collater
-from torch_geometric.data import Batch, Data, Dataset, HeteroData
+from torch_geometric.data import Data, Dataset, HeteroData
 
 from subgraph.construct import construct_subgraph_batch
 
@@ -29,6 +27,7 @@ class SubgraphSetCollator:
 
         return construct_subgraph_batch(list_subgraphs,
                                         [len(g_list) for g_list in batch_list],
+                                        None,
                                         None,
                                         batch_list[0][0].x.device)
 

@@ -13,15 +13,15 @@ from subgraph.greedy_expanding_tree import numba_greedy_expand_tree
 
 def node_rand_sampling(graph: Data,
                        n_subgraphs: int,
-                       node_per_subgraph: int = -1) -> List[Data]:
+                       node_per_subgraph: int = -1,
+                       relabel: bool = False) -> List[Data]:
     """
     Sample subgraphs.
-    TODO: replace for-loop with functorch.vmap https://pytorch.org/tutorials/prototype/vmap_recipe.html?highlight=vmap
-
 
     :param graph:
     :param n_subgraphs:
     :param node_per_subgraph:
+    :param relabel:
     :return:
         A list of graphs and their index masks
     """
@@ -34,7 +34,7 @@ def node_rand_sampling(graph: Data,
     for i in range(n_subgraphs):
         indices = torch.randperm(n_nodes)[:node_per_subgraph]
         sort_indices = torch.sort(indices).values
-        graphs.append(nodesubset_to_subgraph(graph, sort_indices, relabel=False))
+        graphs.append(nodesubset_to_subgraph(graph, sort_indices, relabel=relabel))
 
     return graphs
 
@@ -107,25 +107,27 @@ def edge_sample_preproc(data: Data) -> Tuple[LongTensor, Tensor, bool]:
     return edge_index, edge_attr, undirected
 
 
-def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3) -> List[Data]:
+def khop_subgraph_sampling(data: Data, n_subgraphs: int, khop: int = 3, relabel: bool = False) -> List[Data]:
     """
     Sample the k-hop-neighbors subgraphs randomly
 
     :param data:
     :param n_subgraphs:
     :param khop:
+    :param relabel:
     :return:
     """
     sample_indices = random.sample(range(data.num_nodes), n_subgraphs)
     graphs = []
 
     for idx in sample_indices:
-        _, edge_index, _, edge_mask = k_hop_subgraph(idx,
-                                                     khop,
-                                                     data.edge_index,
-                                                     relabel_nodes=False,
-                                                     num_nodes=data.num_nodes)
-        graphs.append(Data(x=data.x,
+        node_idx, edge_index, _, edge_mask = k_hop_subgraph(idx,
+                                                            khop,
+                                                            data.edge_index,
+                                                            relabel_nodes=relabel,
+                                                            num_nodes=data.num_nodes)
+
+        graphs.append(Data(x=data.x if not relabel else data.x[node_idx],
                            edge_index=edge_index,
                            edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,
                            num_nodes=data.num_nodes,
@@ -146,7 +148,16 @@ def max_spanning_tree_subgraph(data: Data, n_subgraphs: int) -> List[Data]:
     return graphs
 
 
-def greedy_expand_sampling(graph: Data, n_subgraphs: int, node_per_subgraph: int = -1) -> List[Data]:
+def greedy_expand_sampling(graph: Data, n_subgraphs: int, node_per_subgraph: int = -1, relabel: bool = False)\
+        -> List[Data]:
+    """
+
+    :param graph:
+    :param n_subgraphs:
+    :param node_per_subgraph:
+    :param relabel:
+    :return:
+    """
     if node_per_subgraph >= graph.num_nodes:
         return [graph] * n_subgraphs
 
@@ -154,6 +165,6 @@ def greedy_expand_sampling(graph: Data, n_subgraphs: int, node_per_subgraph: int
     graphs = []
     for _ in range(n_subgraphs):
         node_mask = numba_greedy_expand_tree(edge_index, node_per_subgraph, None, graph.num_nodes, repeat=1)
-        graphs.append(nodesubset_to_subgraph(graph, torch.from_numpy(node_mask), relabel=False))
+        graphs.append(nodesubset_to_subgraph(graph, torch.from_numpy(node_mask).sort().values, relabel=relabel))
 
     return graphs

@@ -1,6 +1,5 @@
 import itertools
 import os
-import pdb
 import pickle
 from collections import defaultdict
 from typing import Union,Optional
@@ -34,6 +33,7 @@ class Trainer:
                  imle_sample_policy: str,
                  aux_loss_weight: float,
                  sample_k: int,
+                 remove_node: bool,
                  voting: int,
                  max_patience: int,
                  optimizer: Optimizer,
@@ -48,6 +48,7 @@ class Trainer:
         :param imle_sample_policy:
         :param aux_loss_weight:
         :param sample_k: sample nodes or edges
+        :param remove_node:
         :param voting:
         :param max_patience:
         :param optimizer:
@@ -64,6 +65,7 @@ class Trainer:
         self.imle_sample_policy = imle_sample_policy
         self.aux_loss_weight = aux_loss_weight
         self.sample_k = sample_k
+        self.remove_node = remove_node
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.criterion = criterion
@@ -148,11 +150,14 @@ class Trainer:
         else:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
 
-        list_subgraphs, edge_weights = zip(
+        list_subgraphs, edge_weights, selected_node_masks = zip(
             *[subgraphs_from_mask(g, i.T, grad=train) for g, i in
               zip(graphs, sample_idx)])
         list_subgraphs = list(itertools.chain.from_iterable(list_subgraphs))
-        data = construct_subgraph_batch(list_subgraphs, [_.shape[1] for _ in sample_idx], edge_weights,
+        data = construct_subgraph_batch(list_subgraphs,
+                                        [_.shape[1] for _ in sample_idx],
+                                        edge_weights,
+                                        selected_node_masks,
                                         self.device)
 
         return data, aux_loss

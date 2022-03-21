@@ -85,6 +85,14 @@ class NetGINE(torch.nn.Module):
                 intermediate_x.append(x)
 
         x = torch.cat(intermediate_x, dim=-1) if intermediate_x is not None else x
+        if hasattr(data, 'selected_node_masks') and data.selected_node_masks is not None:
+            if data.selected_node_masks.dtype == torch.float:
+                x = x * data.selected_node_masks[:, None]
+            elif data.selected_node_masks.dtype == torch.bool:
+                x = x[data.selected_node_masks, :]
+            else:
+                raise ValueError
+
         x = global_mean_pool(x, batch)
 
         x = torch.relu(self.fc1(x))

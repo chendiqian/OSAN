@@ -42,7 +42,9 @@ def edgemasked_graphs_from_nodemask(graph: Data,
     :param graph:
     :param masks: shape (n_subgraphs, n_node_in_original_graph,) node masks
     :param grad: whether to contain gradient info
-    :param remove_node:
+    :param remove_node: If true, the discarded nodes are used for message passing and its masking, but not in the graph
+    pooling. If the mask.dtype is float, then the output node features are masked through element multiplication, and
+    hence we have grad on this, if mask.dtype is bool, then the node features are sliced and no grad from that.
     :param add_full_graph:
     :return:
     """
@@ -56,6 +58,7 @@ def edgemasked_graphs_from_nodemask(graph: Data,
                                              dtype=edge_weights.dtype,
                                              device=edge_weights.device)), dim=0)
         if remove_node:
+            # only do this when we need the mask to mask out graph pooling
             masks = torch.cat((masks,
                                torch.ones(1, masks.shape[1],
                                           dtype=masks.dtype,
@@ -100,7 +103,7 @@ def construct_subgraph_batch(graph_list: List[Data],
     """
 
     :param graph_list: a list of [subgraph1_1, subgraph1_2, subgraph1_3, subgraph2_1, ...]
-    :param num_subgraphs: a list number of subgraphs
+    :param num_subgraphs: a list number of subgraphs (potentially with the original graph)
     :param edge_weights:
     :param selected_node_masks:
     :param device:

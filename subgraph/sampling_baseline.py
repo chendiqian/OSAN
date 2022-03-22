@@ -187,6 +187,6 @@ def greedy_expand_sampling(graph: Data,
     graphs = [graph] if add_full_graph else []
     for _ in range(n_subgraphs):
         node_mask = numba_greedy_expand_tree(edge_index, node_per_subgraph, None, graph.num_nodes, repeat=1)
-        graphs.append(nodesubset_to_subgraph(graph, torch.from_numpy(node_mask).sort().values, relabel=relabel))
+        graphs.append(nodesubset_to_subgraph(graph, torch.from_numpy(node_mask), relabel=relabel))
 
     return graphs

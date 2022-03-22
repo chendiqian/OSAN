@@ -70,7 +70,7 @@ class RawMSTSampler(SamplerOnTheFly):
 
 
 class DeckSampler:
-    def __init__(self, mode: str, fraction: float, num_subgraph: int):
+    def __init__(self, mode: str, fraction: float, num_subgraph: int, add_full_graph: bool = False):
         """
         Sample subgraphs from a full deck (given by the dataset[idx])
 
@@ -82,19 +82,23 @@ class DeckSampler:
         self.mode = mode
         self.fraction = fraction
         self.num_subgraph = num_subgraph
+        self.add_full_graph = add_full_graph
 
     def __call__(self, batch: Union[Data, Batch]) -> List[Data]:
+        # the first is original graph
         data_list = Batch.to_data_list(batch)
-        count = math.ceil(self.fraction * len(data_list)) if self.mode == 'float' else self.num_subgraph
-        sampled_subgraphs = random.sample(data_list, count) if count < len(data_list) else data_list
+        graph, subgraphs = data_list[0], data_list[1:]
+        count = math.ceil(self.fraction * len(subgraphs)) if self.mode == 'float' else self.num_subgraph
+        sampled_subgraphs = random.sample(subgraphs, count) if count < len(subgraphs) else subgraphs
+        if self.add_full_graph:
+            sampled_subgraphs.append(graph)
         return sampled_subgraphs
 
 
 class Graph2Subgraph:
-    def __init__(self, process_subgraphs: Callable = None, remove_node: bool = False, add_full_graph: bool = True):
+    def __init__(self, process_subgraphs: Callable = None, remove_node: bool = False):
         self.process_subgraphs = process_subgraphs
         self.relabel = remove_node
-        self.add_full_graph = add_full_graph
 
     def __call__(self, data: Data) -> List[Data]:
         subgraphs = self.to_subgraphs(data)
@@ -119,7 +123,7 @@ class NodeDeleted(Graph2Subgraph):
         :param data:
         :return:
         """
-        subgraphs = [data] if self.add_full_graph else []
+        subgraphs = [data]
         all_nodes = torch.arange(data.num_nodes)
 
         for i in range(data.num_nodes):
@@ -136,7 +140,7 @@ class EdgeDeleted(Graph2Subgraph):
 
         edge_index, edge_attr, undirected = edge_sample_preproc(data)
 
-        subgraphs = [data] if self.add_full_graph else []
+        subgraphs = [data]
         for i in range(edge_index.shape[1]):
             subgraph_edge_index = torch.hstack([edge_index[:, :i], edge_index[:, i + 1:]])
             subgraph_edge_attr = torch.vstack([edge_attr[:i], edge_attr[i + 1:]]) if edge_attr is not None else None
@@ -162,8 +166,7 @@ class EdgeDeleted(Graph2Subgraph):
 
 def policy2transform(policy: str,
                      process_subgraphs: Callable = None,
-                     relabel: bool = False,
-                     add_full_graph: bool = True) -> Union[Graph2Subgraph, Callable]:
+                     relabel: bool = False) -> Union[Graph2Subgraph, Callable]:
     """
     Pre-transform for datasets
     e.g. make a deck of subgraphs for the original graph, each with size n - 1
@@ -175,9 +178,9 @@ def policy2transform(policy: str,
     :return:
     """
     if policy == "node_deleted":
-        return NodeDeleted(process_subgraphs=process_subgraphs, remove_node=relabel, add_full_graph=add_full_graph)
+        return NodeDeleted(process_subgraphs=process_subgraphs, remove_node=relabel)
     elif policy == 'edge_deleted':
-        return EdgeDeleted(process_subgraphs=process_subgraphs, add_full_graph=add_full_graph)
+        return EdgeDeleted(process_subgraphs=process_subgraphs)
     elif policy == 'null':
         return lambda x: x
     else:

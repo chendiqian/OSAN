@@ -32,8 +32,7 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
 
         pre_transform = Compose([GraphToUndirected(),
                                  policy2transform(args.esan_policy,
-                                                  relabel=args.remove_node,
-                                                  add_full_graph=args.add_full_graph)])
+                                                  relabel=args.remove_node)])
 
         if args.esan_policy == 'null':   # I-MLE, or normal training, or sample on the fly
             transform = None
@@ -44,7 +43,7 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
                                                                args.add_full_graph)
             dataset = TUDataset(args.data_path, transform=transform, name="ZINC_full", pre_transform=pre_transform)
         else:   # ESAN: sample from the deck
-            transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)
+            transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k, add_full_graph=args.add_full_graph)
             dataset = CustomTUDataset(args.data_path + f'/deck/{args.esan_policy}', name="ZINC_full",
                                       transform=transform, pre_transform=pre_transform)
 
@@ -84,8 +83,7 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
             os.mkdir(args.data_path)
 
         pre_transform = policy2transform(args.esan_policy,
-                                         relabel=args.remove_node,
-                                         add_full_graph=args.add_full_graph)
+                                         relabel=args.remove_node)
 
         if args.esan_policy == 'null':   # I-MLE, or normal training, or sample on the fly
             transform = None
@@ -96,7 +94,7 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
                                                                args.add_full_graph)
             dataset = TUDataset(args.data_path, transform=transform, name="MUTAG", pre_transform=pre_transform)
         else:   # ESAN: sample from the deck
-            transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k)
+            transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k, add_full_graph=args.add_full_graph)
             dataset = CustomTUDataset(args.data_path + f'/deck/{args.esan_policy}', name="MUTAG",
                                       transform=transform, pre_transform=pre_transform)
 

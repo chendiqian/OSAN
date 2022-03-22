@@ -118,7 +118,7 @@ def construct_subgraph_batch(graph_list: List[Data],
     #  need to check `batch._slice_dict` and `batch._inc_dict`
 
     batch_idx = batch.batch
-    if selected_node_masks[0] is not None:
+    if selected_node_masks is not None and selected_node_masks[0] is not None:
         selected_node_masks = torch.cat(selected_node_masks, dim=0) if isinstance(selected_node_masks, (list, tuple)) \
             else selected_node_masks
 
@@ -131,7 +131,7 @@ def construct_subgraph_batch(graph_list: List[Data],
     else:
         selected_node_masks = None
 
-    if edge_weights[0] is not None:
+    if edge_weights is not None and edge_weights[0] is not None:
         edge_weights = torch.cat(edge_weights, dim=0) if isinstance(edge_weights, (list, tuple)) else edge_weights
     else:
         edge_weights = None

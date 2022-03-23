@@ -138,10 +138,17 @@ def khop_subgraph_sampling(data: Data,
                                                             relabel_nodes=relabel,
                                                             num_nodes=data.num_nodes)
 
+        num_nodes = data.num_nodes
+        if relabel:
+            if node_idx.dtype in [torch.bool, torch.uint8]:
+                num_nodes = node_idx.sum()
+            elif node_idx.dtype in [torch.int32, torch.int64]:
+                num_nodes = node_idx.numel()
+
         graphs.append(Data(x=data.x if not relabel else data.x[node_idx],
                            edge_index=edge_index,
                            edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,
-                           num_nodes=data.num_nodes,
+                           num_nodes=num_nodes,
                            y=data.y))
     return graphs
 

@@ -5,6 +5,7 @@ import math
 import torch
 from torch import Tensor, Size
 from torch.distributions.gamma import Gamma
+from torch.distributions.gumbel import Gumbel
 
 from abc import ABC, abstractmethod
 
@@ -65,3 +66,16 @@ class SumOfGammaNoiseDistribution(BaseNoiseDistribution):
             samples = samples + gamma.sample(sample_shape=shape).to(self.device)
         samples = (samples - math.log(self.nb_iterations)) / self.k
         return samples.to(self.device)
+
+
+class GumbelDistribution(BaseNoiseDistribution):
+    def __init__(self, loc: float = 0., scale: float = 1.0, device: torch.device = 'cpu'):
+        super().__init__()
+        self.loc = loc
+        self.scale = scale
+        self.device = device
+
+    def sample(self, shape: Size) -> Tensor:
+        gumbel = Gumbel(loc=self.loc, scale=self.scale)
+        samples = gumbel.sample(shape).to(self.device)
+        return samples

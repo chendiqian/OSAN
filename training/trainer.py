@@ -10,7 +10,7 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from data.custom_dataloader import MYDataLoader
-from imle.noise import SumOfGammaNoiseDistribution
+from imle.noise import SumOfGammaNoiseDistribution, GumbelDistribution
 from imle.target import TargetDistribution
 from imle.wrapper import imle
 from subgraph.construct import (edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask,
@@ -84,9 +84,10 @@ class Trainer:
         if train_embd_model:
             self.temp = 1.
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
-            self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
-                                                                  nb_iterations=100,
-                                                                  device=device)
+            # self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
+            #                                                       nb_iterations=100,
+            #                                                       device=device)
+            self.noise_distribution = GumbelDistribution(0., 1., self.device)
             self.imle_scheduler = IMLEScheme(self.imle_sample_policy,
                                              None,
                                              None,

@@ -4,11 +4,12 @@ import random
 import torch
 from torch import Tensor, LongTensor
 from torch_geometric.data import Data
-from torch_geometric.utils import is_undirected, to_undirected, k_hop_subgraph
+from torch_geometric.utils import is_undirected, to_undirected
 
 from subgraph.construct import nodesubset_to_subgraph
 from subgraph.mst_subgraph import kruskal_max_span_tree
 from subgraph.greedy_expanding_tree import numba_greedy_expand_tree
+from subgraph.khop_subgraph import numba_k_hop_subgraph
 
 
 def node_rand_sampling(graph: Data,
@@ -131,22 +132,20 @@ def khop_subgraph_sampling(data: Data,
     sample_indices = random.sample(range(data.num_nodes), n_subgraphs)
     graphs = [data] if add_full_graph else []
 
+    np_edge_index = data.edge_index.cpu().numpy()
     for idx in sample_indices:
-        node_idx, edge_index, _, edge_mask = k_hop_subgraph(idx,
-                                                            khop,
-                                                            data.edge_index,
-                                                            relabel_nodes=relabel,
-                                                            num_nodes=data.num_nodes)
+        node_idx, edge_index, edge_mask = numba_k_hop_subgraph(np_edge_index,
+                                                               idx,
+                                                               khop,
+                                                               data.num_nodes,
+                                                               relabel)
 
         num_nodes = data.num_nodes
         if relabel:
-            if node_idx.dtype in [torch.bool, torch.uint8]:
-                num_nodes = node_idx.sum()
-            elif node_idx.dtype in [torch.int32, torch.int64]:
-                num_nodes = node_idx.numel()
+            num_nodes = len(node_idx)
 
         graphs.append(Data(x=data.x if not relabel else data.x[node_idx],
-                           edge_index=edge_index,
+                           edge_index=torch.from_numpy(edge_index).to(data.edge_index.device),
                            edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,
                            num_nodes=num_nodes,
                            y=data.y))

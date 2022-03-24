@@ -85,7 +85,7 @@ class IMLEScheme:
                 # shape (n_nodes, dim)
                 mask = (logit >= thresh[None]).to(torch.float)
             elif self.imle_sample_policy == 'khop_subgraph':
-                mask = khop_subgraphs(self.graphs[i], self.sample_k, instance_weight=logit).T
+                mask = khop_subgraphs(self.graphs[i], self.sample_k, instance_weight=logit)
             elif self.imle_sample_policy == 'mst':
                 mask = mst_subgraph_sampling(self.graphs[i], logit).T
             elif self.imle_sample_policy == 'greedy_exp':

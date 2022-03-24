@@ -28,7 +28,7 @@ def khop_subgraphs(graph: Data,
     indices = torch.argmax(instance_weight, dim=0)
 
     for i, idx in enumerate(indices):
-        _node_idx, _edge_index, _, edge_mask = k_hop_subgraph(idx, khop, graph.edge_index, relabel_nodes=False)
+        _node_idx, _edge_index, _, edge_mask = k_hop_subgraph(idx[None], khop, graph.edge_index, relabel_nodes=False)
         sampled_masks[_node_idx, i] = 1.0
 
     return sampled_masks

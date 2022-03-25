@@ -129,7 +129,7 @@ def khop_subgraph_sampling(data: Data,
     :param add_full_graph:
     :return:
     """
-    sample_indices = random.sample(range(data.num_nodes), n_subgraphs)
+    sample_indices = random.choices(range(data.num_nodes), k=n_subgraphs)
     graphs = [data] if add_full_graph else []
 
     np_edge_index = data.edge_index.cpu().numpy()

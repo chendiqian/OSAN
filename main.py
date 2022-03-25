@@ -200,3 +200,5 @@ if __name__ == '__main__':
     logger.info(f'Best val loss: {trainer.best_val_loss}')
     logger.info(f'Best val acc: {trainer.best_val_acc}')
     trainer.save_curve(folder_name)
+    torch.save(emb_model.state_dict(), f'{folder_name}/embd_model_final.pt')
+    torch.save(model.state_dict(), f'{folder_name}/model_final.pt')

@@ -59,6 +59,25 @@ def numba_k_hop_subgraph(edge_index: np.ndarray, seed_node: int, khop: int, num_
     return np_node_idx, edge_index, edge_mask
 
 
+@numba.njit(cache=True, parallel=True)
+def parallel_k_hop_neighbor(edge_index: np.ndarray, num_nodes: int, khop: int, relabel: bool):
+    """
+
+    :param edge_index:
+    :param num_nodes:
+    :param khop:
+    :param relabel:
+    :return:
+    """
+    nodes = [np.ones(0, dtype=np.int64) for _ in range(num_nodes)]
+
+    for i in numba.prange(num_nodes):
+        node_idx, _edge_index, edge_mask = numba_k_hop_subgraph(edge_index, numba.int64(i), khop, num_nodes, False)
+        nodes[i] = node_idx
+
+    return nodes
+
+
 def khop_subgraphs(graph: Data,
                    khop: int = 3,
                    instance_weight: Optional[Tensor] = None,

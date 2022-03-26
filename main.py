@@ -146,7 +146,7 @@ if __name__ == '__main__':
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
                            args.num_subgraphs).to(device)
-        train_params = list(emb_model.params_list()) + list(model.parameters())
+        train_params = emb_model.params_list + list(model.parameters())
     else:
         emb_model = None
         train_params = model.parameters()

@@ -2,7 +2,7 @@ import itertools
 import os
 import pickle
 from collections import defaultdict
-from typing import Union,Optional
+from typing import Union, Optional
 
 import torch.linalg
 from torch.utils.data import DataLoader as TorchDataLoader
@@ -10,7 +10,7 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from data.custom_dataloader import MYDataLoader
-from imle.noise import SumOfGammaNoiseDistribution, GumbelDistribution
+from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
 from imle.wrapper import imle
 from subgraph.construct import (edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask,
@@ -41,6 +41,7 @@ class Trainer:
                  scheduler: Tuple[Scheduler, Optional[Scheduler]],
                  criterion: Loss,
                  train_embd_model: bool,
+                 noise_scale: float,
                  beta: float,
                  device: Union[str, torch.device]):
         """
@@ -57,6 +58,7 @@ class Trainer:
         :param scheduler:
         :param criterion:
         :param train_embd_model:
+        :param noise_scale:
         :param beta:
         :param device:
         """
@@ -87,7 +89,7 @@ class Trainer:
             # self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
             #                                                       nb_iterations=100,
             #                                                       device=device)
-            self.noise_distribution = GumbelDistribution(0., 1., self.device)
+            self.noise_distribution = GumbelDistribution(0., noise_scale, self.device)
             self.imle_scheduler = IMLEScheme(self.imle_sample_policy,
                                              None,
                                              None,

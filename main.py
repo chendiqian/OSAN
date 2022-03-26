@@ -46,6 +46,7 @@ def get_parse() -> Namespace:
                                                                  'or k-hop neigbors')
     parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')
     parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
+    parser.add_argument('--noise_scale', type=float, default=1.)
     parser.add_argument('--beta', type=float, default=10.)
     parser.add_argument('--aux_loss_weight', type=float, default=0.)
 
@@ -174,6 +175,7 @@ if __name__ == '__main__':
                       scheduler=(scheduler, scheduler_embd),
                       criterion=criterion,
                       train_embd_model=args.train_embd_model,
+                      noise_scale=args.noise_scale,
                       beta=args.beta,
                       device=device)
 

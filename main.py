@@ -24,6 +24,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--lr_patience', type=int, default=20)
     parser.add_argument('--dropout', type=float, default=0.)
     parser.add_argument('--reg', type=float, default=0.)
+    parser.add_argument('--reg_embd', type=float, default=0.)
     parser.add_argument('--num_convlayers', type=int, default=4)
     parser.add_argument('--gnn_jk', type=str, default=None, choices=[None, 'concat', 'residual'])
     parser.add_argument('--batch_size', type=int, default=4)
@@ -146,12 +147,21 @@ if __name__ == '__main__':
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
                            args.num_subgraphs).to(device)
-        train_params = list(emb_model.params_list()) + list(model.parameters())
+        optimizer_embd = torch.optim.Adam(emb_model.params_list, lr=args.lr, weight_decay=args.reg_embd)
+        scheduler_embd = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_embd, mode='min',
+                                                                    factor=0.316227766,
+                                                                    patience=args.lr_patience,
+                                                                    min_lr=1e-5)
     else:
         emb_model = None
-        train_params = model.parameters()
+        optimizer_embd = None
+        scheduler_embd = None
 
-    optimizer = torch.optim.Adam(train_params, lr=args.lr, weight_decay=args.reg)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.reg)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                           factor=0.316227766,
+                                                           patience=args.lr_patience,
+                                                           min_lr=1e-5)
     trainer = Trainer(task_type=task_type,
                       imle_sample_policy=args.sample_policy,
                       aux_loss_weight=args.aux_loss_weight,
@@ -160,11 +170,8 @@ if __name__ == '__main__':
                       add_full_graph=args.add_full_graph,
                       voting=args.voting,
                       max_patience=args.patience,
-                      optimizer=optimizer,
-                      scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                                           factor=0.316227766,
-                                                                           patience=args.lr_patience,
-                                                                           min_lr=1e-5),
+                      optimizer=(optimizer, optimizer_embd),
+                      scheduler=(scheduler, scheduler_embd),
                       criterion=criterion,
                       train_embd_model=args.train_embd_model,
                       beta=args.beta,

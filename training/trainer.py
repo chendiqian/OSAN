@@ -37,8 +37,8 @@ class Trainer:
                  add_full_graph: bool,
                  voting: int,
                  max_patience: int,
-                 optimizer: Optimizer,
-                 scheduler: Scheduler,
+                 optimizer: Tuple[Optimizer, Optional[Optimizer]],
+                 scheduler: Tuple[Scheduler, Optional[Scheduler]],
                  criterion: Loss,
                  train_embd_model: bool,
                  beta: float,
@@ -69,8 +69,8 @@ class Trainer:
         self.sample_k = sample_k
         self.remove_node = remove_node
         self.add_full_graph = add_full_graph
-        self.optimizer = optimizer
-        self.scheduler = scheduler
+        self.optimizer, self.optimizer_embd = optimizer
+        self.scheduler, self.scheduler_embd = scheduler
         self.criterion = criterion
         self.device = device
 
@@ -189,6 +189,8 @@ class Trainer:
         for data in dataloader:
             data = data.to(self.device)
             self.optimizer.zero_grad()
+            if self.optimizer_embd is not None:
+                self.optimizer_embd.zero_grad()
 
             aux_loss = None
             if emb_model is not None:
@@ -206,6 +208,8 @@ class Trainer:
                 preds.append(pred)
                 labels.append(data.y)
             self.optimizer.step()
+            if self.optimizer_embd is not None:
+                self.optimizer_embd.step()
 
         if self.task_type == 'classification':
             preds = torch.cat(preds, dim=0) > 0.
@@ -268,6 +272,8 @@ class Trainer:
 
         val_loss = val_losses.item() / num_graphs
         self.scheduler.step(val_loss)
+        if self.scheduler_embd is not None:
+            self.scheduler_embd.step(val_loss)
 
         early_stop = False
         if val_loss < self.best_val_loss:

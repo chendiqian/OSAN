@@ -1,5 +1,3 @@
-import pdb
-
 import torch
 from torch.nn import Sequential, Linear, ReLU
 from torch_geometric.nn import global_mean_pool, MessagePassing
@@ -80,7 +78,6 @@ class NetGINE(torch.nn.Module):
         for i, (conv, bn) in enumerate(zip(self.conv, self.bn)):
             x_new = conv(x, edge_index, edge_attr, edge_weight)
             x_new = bn(x_new)
-            pdb.set_trace()
             x_new = torch.relu(x_new)
             x_new = torch.dropout(x_new, p=self.dropout, train=self.training)
             x = residual(x, x_new) if self.jk == 'residual' else x_new

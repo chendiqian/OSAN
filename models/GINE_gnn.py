@@ -49,11 +49,11 @@ class NetGINE(torch.nn.Module):
         assert num_convlayers > 1
 
         self.conv = torch.nn.ModuleList([GINEConv(edge_features, input_dims, dim, use_bias)])
-        self.bn = torch.nn.ModuleList([torch.nn.BatchNorm1d(dim)])
+        self.bn = torch.nn.ModuleList([torch.nn.LayerNorm(dim)])
 
         for _ in range(num_convlayers - 1):
             self.conv.append(GINEConv(edge_features, dim, dim, use_bias))
-            self.bn.append(torch.nn.BatchNorm1d(dim))
+            self.bn.append(torch.nn.LayerNorm(dim))
 
         if self.jk == 'concat':
             self.fc1 = Linear(num_convlayers * dim, dim)

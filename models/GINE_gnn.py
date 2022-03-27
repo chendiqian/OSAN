@@ -1,3 +1,5 @@
+import pdb
+
 import torch
 from torch.nn import Sequential, Linear, ReLU
 from torch_geometric.nn import global_mean_pool, MessagePassing
@@ -49,11 +51,11 @@ class NetGINE(torch.nn.Module):
         assert num_convlayers > 1
 
         self.conv = torch.nn.ModuleList([GINEConv(edge_features, input_dims, dim, use_bias)])
-        self.bn = torch.nn.ModuleList([torch.nn.LayerNorm(dim)])
+        self.bn = torch.nn.ModuleList([torch.nn.BatchNorm1d(dim)])
 
         for _ in range(num_convlayers - 1):
             self.conv.append(GINEConv(edge_features, dim, dim, use_bias))
-            self.bn.append(torch.nn.LayerNorm(dim))
+            self.bn.append(torch.nn.BatchNorm1d(dim))
 
         if self.jk == 'concat':
             self.fc1 = Linear(num_convlayers * dim, dim)
@@ -78,6 +80,7 @@ class NetGINE(torch.nn.Module):
         for i, (conv, bn) in enumerate(zip(self.conv, self.bn)):
             x_new = conv(x, edge_index, edge_attr, edge_weight)
             x_new = bn(x_new)
+            pdb.set_trace()
             x_new = torch.relu(x_new)
             x_new = torch.dropout(x_new, p=self.dropout, train=self.training)
             x = residual(x, x_new) if self.jk == 'residual' else x_new

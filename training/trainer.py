@@ -21,7 +21,8 @@ from models import NetGINE, NetGCN
 
 Optimizer = Union[torch.optim.Adam,
                   torch.optim.SGD]
-Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau]
+Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau, 
+                  torch.optim.lr_scheduler.MultiStepLR]
 Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
@@ -273,9 +274,16 @@ class Trainer:
             val_acc = None
 
         val_loss = val_losses.item() / num_graphs
-        self.scheduler.step(val_loss)
+
+        if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            self.scheduler.step(val_loss)
+        else:
+            self.scheduler.step()
         if self.scheduler_embd is not None:
-            self.scheduler_embd.step(val_loss)
+            if isinstance(self.scheduler_embd, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                self.scheduler_embd.step(val_loss)
+            else:
+                self.scheduler_embd.step()
 
         early_stop = False
         if val_loss < self.best_val_loss:

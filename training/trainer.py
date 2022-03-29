@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
+from data.custom_scheduler import BaseScheduler, StepScheduler
 from data.custom_dataloader import MYDataLoader
 from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
@@ -87,10 +88,8 @@ class Trainer:
         if train_embd_model:
             self.temp = 1.
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
-            # self.noise_distribution = SumOfGammaNoiseDistribution(k=self.temp,
-            #                                                       nb_iterations=100,
-            #                                                       device=device)
             self.noise_distribution = GumbelDistribution(0., noise_scale, self.device)
+            self.noise_scale_scheduler = StepScheduler(noise_scale, 0.999)
             self.imle_scheduler = IMLEScheme(self.imle_sample_policy,
                                              None,
                                              None,
@@ -153,6 +152,7 @@ class Trainer:
                 aux_loss = self.get_aux_loss(sample_idx)
 
             sample_idx = torch.split(sample_idx, split_idx, dim=0)
+            self.noise_distribution.scale = self.noise_scale_scheduler()
 
         else:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)

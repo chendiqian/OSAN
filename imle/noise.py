@@ -72,8 +72,16 @@ class GumbelDistribution(BaseNoiseDistribution):
     def __init__(self, loc: float = 0., scale: float = 1.0, device: torch.device = 'cpu'):
         super().__init__()
         self.loc = loc
-        self.scale = scale
+        self._scale = scale
         self.device = device
+
+    @property
+    def scale(self):
+        return self._scale
+
+    @scale.setter
+    def scale(self, value):
+        self._scale = value
 
     def sample(self, shape: Size) -> Tensor:
         gumbel = Gumbel(loc=self.loc, scale=self.scale)

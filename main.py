@@ -20,6 +20,7 @@ def get_parse() -> Namespace:
     parser.add_argument('--dataset', type=str, default='zinc')
     parser.add_argument('--hid_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--sgd_momentum', type=float, default=0.9)
     parser.add_argument('--patience', type=int, default=100, help='for early stop')
     parser.add_argument('--lr_patience', type=int, default=20)
     parser.add_argument('--dropout', type=float, default=0.)
@@ -84,6 +85,7 @@ def naming(args: Namespace) -> str:
            f'lr_patience_{args.lr_patience}_' \
            f'dp_{args.dropout}_' \
            f'reg_{args.reg}_' \
+           f'sgdmomentum_{args.sgd_momentum}_' \
            f'n_lay_{args.num_convlayers}_' \
            f'bsize_{args.batch_size}_' \
            f'jk_{args.gnn_jk}_'
@@ -95,7 +97,8 @@ def naming(args: Namespace) -> str:
             name += f'policy_{args.sample_policy}_' \
                     f'n_subg_{args.num_subgraphs}_' \
                     f'IMLE_{args.train_embd_model}_' \
-                    f'samplek_{args.sample_k}_'
+                    f'samplek_{args.sample_k}_' \
+                    f'beta{args.beta}_scale{args.noise_scale}_'
     else:
         name += f'esanpolicy_{args.esan_policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
@@ -148,21 +151,20 @@ if __name__ == '__main__':
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
                            args.num_subgraphs).to(device)
-        optimizer_embd = torch.optim.Adam(emb_model.params_list, lr=args.lr, weight_decay=args.reg_embd)
-        scheduler_embd = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_embd, mode='min',
-                                                                    factor=0.316227766,
-                                                                    patience=args.lr_patience,
-                                                                    min_lr=1e-5)
+        # optimizer_embd = torch.optim.SGD(emb_model.params_list, lr=args.lr, momentum=args.sgd_momentum, weight_decay=args.reg_embd)
+        optimizer_embd = torch.optim.Adam(emb_model.parameters(), lr=1e-4, weight_decay=args.reg_embd)
+        scheduler_embd = None
     else:
         emb_model = None
         optimizer_embd = None
         scheduler_embd = None
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.reg)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                           factor=0.316227766,
-                                                           patience=args.lr_patience,
-                                                           min_lr=1e-5)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+    #                                                        factor=0.316227766,
+    #                                                        patience=args.lr_patience,
+    #                                                        min_lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [400, 600], gamma=0.1 ** 0.5)
     trainer = Trainer(task_type=task_type,
                       imle_sample_policy=args.sample_policy,
                       aux_loss_weight=args.aux_loss_weight,
@@ -183,7 +185,7 @@ if __name__ == '__main__':
         train_loss, train_acc = trainer.train(train_loader, emb_model, model)
         val_loss, val_acc, early_stop = trainer.validation(val_loader, emb_model, model)
 
-        if early_stop:
+        if epoch > 700 and early_stop:
             logger.info('early stopping')
             break
 

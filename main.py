@@ -20,8 +20,8 @@ def get_parse() -> Namespace:
     parser.add_argument('--model', type=str, default='gine')
     parser.add_argument('--dataset', type=str, default='zinc')
     parser.add_argument('--hid_size', type=int, default=256)
-    parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--sgd_momentum', type=float, default=0.9)
+    parser.add_argument('--lr', type=float, default=1.e-3)
+    parser.add_argument('--embd_lr', type=float, default=1.e-4)
     parser.add_argument('--patience', type=int, default=100, help='for early stop')
     parser.add_argument('--lr_patience', type=int, default=20)
     parser.add_argument('--dropout', type=float, default=0.)
@@ -145,8 +145,7 @@ if __name__ == '__main__':
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
                            args.num_subgraphs).to(device)
-        # optimizer_embd = torch.optim.SGD(emb_model.params_list, lr=args.lr, momentum=args.sgd_momentum, weight_decay=args.reg_embd)
-        optimizer_embd = torch.optim.Adam(emb_model.parameters(), lr=1e-4, weight_decay=args.reg_embd)
+        optimizer_embd = torch.optim.Adam(emb_model.params_list, lr=args.embd_lr, weight_decay=args.reg_embd)
         scheduler_embd = None
     else:
         emb_model = None
@@ -154,10 +153,6 @@ if __name__ == '__main__':
         scheduler_embd = None
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.reg)
-    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-    #                                                        factor=0.316227766,
-    #                                                        patience=args.lr_patience,
-    #                                                        min_lr=1e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [400, 600], gamma=0.1 ** 0.5)
     trainer = Trainer(task_type=task_type,
                       imle_sample_policy=args.sample_policy,

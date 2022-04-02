@@ -89,7 +89,7 @@ class Trainer:
             self.temp = 1.
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
             self.noise_distribution = GumbelDistribution(0., noise_scale, self.device)
-            self.noise_scale_scheduler = StepScheduler(noise_scale, 0.999)
+            self.noise_scale_scheduler = BaseScheduler(noise_scale)
             self.imle_scheduler = IMLEScheme(self.imle_sample_policy,
                                              None,
                                              None,

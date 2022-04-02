@@ -4,6 +4,7 @@ from logging import Logger
 import os
 from argparse import Namespace
 from datetime import datetime
+import json
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -80,15 +81,6 @@ def get_logger(folder_path: str) -> Logger:
 
 def naming(args: Namespace) -> str:
     name = f'{args.dataset}_' \
-           f'hid_{args.hid_size}_' \
-           f'lr_{args.lr}_' \
-           f'lr_patience_{args.lr_patience}_' \
-           f'dp_{args.dropout}_' \
-           f'reg_{args.reg}_' \
-           f'sgdmomentum_{args.sgd_momentum}_' \
-           f'n_lay_{args.num_convlayers}_' \
-           f'bsize_{args.batch_size}_' \
-           f'jk_{args.gnn_jk}_'
 
     if args.esan_policy == 'null':
         if args.num_subgraphs == 0:
@@ -97,13 +89,12 @@ def naming(args: Namespace) -> str:
             name += f'policy_{args.sample_policy}_' \
                     f'n_subg_{args.num_subgraphs}_' \
                     f'IMLE_{args.train_embd_model}_' \
-                    f'samplek_{args.sample_k}_' \
-                    f'beta{args.beta}_scale{args.noise_scale}_'
+                    f'samplek_{args.sample_k}_'
     else:
         name += f'esanpolicy_{args.esan_policy}_' \
                 f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
 
-    return name + f'voting_{args.voting}'
+    return name
 
 
 if __name__ == '__main__':
@@ -131,6 +122,9 @@ if __name__ == '__main__':
     os.mkdir(folder_name)
     writer = SummaryWriter(folder_name)
     logger = get_logger(folder_name)
+
+    with open(os.path.join(folder_name, 'hparams.txt'), 'w') as f:
+        json.dump(args.__dict__, f, indent=4)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f'Using device: {device}')

@@ -132,7 +132,6 @@ class Trainer:
         else:
             raise NotImplementedError
 
-        logits = (logits - logits.detach().mean()) / (logits.detach().std() + 1e-6)
         graphs = Batch.to_data_list(data)
 
         self.imle_scheduler.graphs = graphs

@@ -43,6 +43,7 @@ class Trainer:
                  scheduler: Tuple[Scheduler, Optional[Scheduler]],
                  criterion: Loss,
                  train_embd_model: bool,
+                 imle_sample_rand: bool,
                  noise_scale: float,
                  beta: float,
                  device: Union[str, torch.device]):
@@ -60,6 +61,7 @@ class Trainer:
         :param scheduler:
         :param criterion:
         :param train_embd_model:
+        :param imle_sample_rand:
         :param noise_scale:
         :param beta:
         :param device:
@@ -86,6 +88,7 @@ class Trainer:
         self.curves = defaultdict(list)
 
         if train_embd_model:
+            self.imle_sample_rand = imle_sample_rand
             self.temp = 1.
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
             self.noise_distribution = GumbelDistribution(0., noise_scale, self.device)
@@ -95,7 +98,8 @@ class Trainer:
                                              None,
                                              self.sample_k,
                                              return_list=False,
-                                             sample=False)
+                                             perturb=False,
+                                             sample_rand=imle_sample_rand)
 
     def get_aux_loss(self, logits: torch.Tensor):
         """
@@ -180,7 +184,8 @@ class Trainer:
         if emb_model is not None:
             emb_model.train()
             self.imle_scheduler.return_list = False
-            self.imle_scheduler.sample = False
+            self.imle_scheduler.perturb = False
+            self.imle_scheduler.sample_rand = self.imle_sample_rand
 
         model.train()
         train_losses = torch.tensor(0., device=self.device)
@@ -239,7 +244,8 @@ class Trainer:
         if emb_model is not None:
             emb_model.eval()
             self.imle_scheduler.return_list = True
-            self.imle_scheduler.sample = True
+            self.imle_scheduler.perturb = True
+            self.imle_scheduler.sample_rand = False  # test time, always take topk, inspite of noise perturbation
 
         model.eval()
         val_losses = torch.tensor(0., device=self.device)

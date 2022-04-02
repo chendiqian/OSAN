@@ -19,13 +19,14 @@ def get_split_idx(inc_tensor: torch.Tensor) -> Tuple:
 
 
 class IMLEScheme:
-    def __init__(self, imle_sample_policy, ptr, graphs, sample_k, return_list, sample):
+    def __init__(self, imle_sample_policy, ptr, graphs, sample_k, return_list, perturb, sample_rand):
         self.imle_sample_policy = imle_sample_policy
         self.sample_k = sample_k
         self._ptr = ptr
         self._graphs = graphs
         self._return_list = return_list
-        self._sample = sample
+        self._perturb = perturb
+        self._sample_rand = sample_rand
 
     @property
     def ptr(self):
@@ -52,12 +53,12 @@ class IMLEScheme:
         del self._graphs
 
     @property
-    def sample(self):
-        return self._sample
+    def perturb(self):
+        return self._perturb
 
-    @sample.setter
-    def sample(self, value):
-        self._sample = value
+    @perturb.setter
+    def perturb(self, value):
+        self._perturb = value
 
     @property
     def return_list(self):
@@ -67,16 +68,25 @@ class IMLEScheme:
     def return_list(self, value):
         self._return_list = value
 
+    @property
+    def sample_rand(self):
+        return self._sample_rand
+
+    @sample_rand.setter
+    def sample_rand(self, value):
+        self._sample_rand = value
+
     @torch.no_grad()
     def torch_sample_scheme(self, logits: torch.Tensor):
-        logits = logits.detach()
-        logits = torch.split(logits, self.ptr, dim=0)
+        local_logits = logits.detach() if not self.sample_rand else \
+            torch.randn(logits.shape, device=logits.device, dtype=logits.dtype)
+        local_logits = torch.split(local_logits, self.ptr, dim=0)
 
         sample_instance_idx = []
-        for i, logit in enumerate(logits):
+        for i, logit in enumerate(local_logits):
             k = self.sample_k + logit.shape[0] if self.sample_k < 0 else self.sample_k  # e.g. -1 -> remove 1 node
 
-            if self.sample:
+            if self.perturb:
                 noise = torch.randn(logit.shape, device=logit.device) * logit.std(0, keepdims=True)
                 logit = logit.clone() + noise
 

@@ -77,7 +77,7 @@ class IMLEScheme:
             k = self.sample_k + logit.shape[0] if self.sample_k < 0 else self.sample_k  # e.g. -1 -> remove 1 node
 
             if self.sample:
-                noise = torch.randn(logit.shape, device=logit.device) * (logit.std(0) * 0.1)
+                noise = torch.randn(logit.shape, device=logit.device) * logit.std(0, keepdims=True)
                 logit = logit.clone() + noise
 
             if self.imle_sample_policy in ['node', 'edge']:

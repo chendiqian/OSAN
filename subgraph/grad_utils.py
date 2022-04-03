@@ -22,7 +22,7 @@ class Nodemask2Edgemask(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         _, edge_index_col, n_nodes = ctx.saved_tensors
-        final_grad = scatter(grad_output, edge_index_col, dim=-1, reduce='sum', dim_size=n_nodes)
+        final_grad = scatter(grad_output, edge_index_col, dim=-1, reduce='mean', dim_size=n_nodes)
         return final_grad, None, None
 
 

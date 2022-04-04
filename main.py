@@ -52,6 +52,7 @@ def get_parse() -> Namespace:
                                                                         'otherwise sample max during training.')
     parser.add_argument('--micro_batch_embd', type=int, default=1, help='update the embedding model once while '
                                                                         'updating the downstream model # times')
+    parser.add_argument('--norm_logits', action='store_true', help='when true, normalize the digits of embedding model')
     parser.add_argument('--noise_scale', type=float, default=1.)
     parser.add_argument('--beta', type=float, default=10.)
     parser.add_argument('--aux_loss_weight', type=float, default=0.)
@@ -148,7 +149,8 @@ if __name__ == '__main__':
         emb_model = NetGCN(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
-                           args.num_subgraphs).to(device)
+                           args.num_subgraphs,
+                           args.norm_logits).to(device)
         optimizer_embd = torch.optim.Adam(emb_model.params_list, lr=args.embd_lr, weight_decay=args.reg_embd)
         scheduler_embd = None
     else:

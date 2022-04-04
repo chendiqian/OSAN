@@ -40,7 +40,7 @@ class GCNConv(MessagePassing):
 
 
 class NetGCN(torch.nn.Module):
-    def __init__(self, input_dim, edge_features, hid_dim, emb_dim):
+    def __init__(self, input_dim, edge_features, hid_dim, emb_dim, normalize=False):
         super(NetGCN, self).__init__()
 
         self.params_list = []
@@ -50,10 +50,10 @@ class NetGCN(torch.nn.Module):
         self.bn1 = torch.nn.BatchNorm1d(hid_dim)
         self.params_list.append({'params': self.bn1.parameters(), 'weighted_decay': 0.})
 
-        self.conv2 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=False)
-        self.params_list.append({'params': self.conv2.parameters(), 'weighted_decay': 0.})
-        self.bn2 = torch.nn.BatchNorm1d(hid_dim)
-        self.params_list.append({'params': self.bn2.parameters(), 'weighted_decay': 0.})
+        # self.conv2 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=False)
+        # self.params_list.append({'params': self.conv2.parameters(), 'weighted_decay': 0.})
+        # self.bn2 = torch.nn.BatchNorm1d(hid_dim)
+        # self.params_list.append({'params': self.bn2.parameters(), 'weighted_decay': 0.})
 
         self.conv3 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=True)
         self.params_list.append({'params': self.conv3.parameters(), 'weighted_decay': 0.})
@@ -66,18 +66,23 @@ class NetGCN(torch.nn.Module):
         self.params_list.append({'params': self.lin_node.parameters()})
         self.lin_edge = torch.nn.Linear(hid_dim, emb_dim)
         self.params_list.append({'params': self.lin_edge.parameters()})
+        self.normalize = normalize
+        if normalize:
+            self.node_bn = torch.nn.BatchNorm1d(emb_dim, affine=False)
+            self.edge_bn = torch.nn.BatchNorm1d(emb_dim, affine=False)
 
     def forward(self, data):
         x, edge_attr = data.x, data.edge_attr
 
         x, _ = self.conv1(x, data.edge_index, edge_attr)
         x = self.bn1(torch.relu(x))
-        # edge_attr = self.bn_edge1(torch.relu(edge_attr))
-        x, _ = self.conv2(x, data.edge_index, edge_attr)
-        x = self.bn2(torch.relu(x))
-        # edge_attr = self.bn_edge2(torch.relu(edge_attr))
+        # x, _ = self.conv2(x, data.edge_index, edge_attr)
+        # x = self.bn2(torch.relu(x))
         x, edge_attr = self.conv3(x, data.edge_index, edge_attr)
         x = self.lin_node(self.bn3(torch.relu(x)))
         edge_attr = self.lin_edge(self.bn_edge3(torch.relu(edge_attr)))
+        if self.normalize:
+            x = self.node_bn(x)
+            edge_attr = self.edge_bn(edge_attr)
 
         return x, edge_attr

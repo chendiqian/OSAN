@@ -11,6 +11,7 @@ from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from data.custom_scheduler import BaseScheduler, StepScheduler
 from data.custom_dataloader import MYDataLoader
+from data.data_utils import scale_grad
 from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
 from imle.wrapper import imle
@@ -44,6 +45,7 @@ class Trainer:
                  criterion: Loss,
                  train_embd_model: bool,
                  imle_sample_rand: bool,
+                 micro_batch_embd: int,
                  noise_scale: float,
                  beta: float,
                  device: Union[str, torch.device]):
@@ -62,6 +64,7 @@ class Trainer:
         :param criterion:
         :param train_embd_model:
         :param imle_sample_rand:
+        :param micro_batch_embd:
         :param noise_scale:
         :param beta:
         :param device:
@@ -89,6 +92,7 @@ class Trainer:
 
         if train_embd_model:
             self.imle_sample_rand = imle_sample_rand
+            self.micro_batch_embd = micro_batch_embd
             self.temp = 1.
             self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
             self.noise_distribution = GumbelDistribution(0., noise_scale, self.device)
@@ -186,6 +190,7 @@ class Trainer:
             self.imle_scheduler.return_list = False
             self.imle_scheduler.perturb = False
             self.imle_scheduler.sample_rand = self.imle_sample_rand
+            self.optimizer_embd.zero_grad()
 
         model.train()
         train_losses = torch.tensor(0., device=self.device)
@@ -194,11 +199,9 @@ class Trainer:
             labels = []
         num_graphs = 0
 
-        for data in dataloader:
+        for batch_id, data in enumerate(dataloader):
             data = data.to(self.device)
             self.optimizer.zero_grad()
-            if self.optimizer_embd is not None:
-                self.optimizer_embd.zero_grad()
 
             aux_loss = None
             if emb_model is not None:
@@ -210,14 +213,18 @@ class Trainer:
                 loss += aux_loss
 
             loss.backward()
+            self.optimizer.step()
+            if self.optimizer_embd is not None:
+                if (batch_id % self.micro_batch_embd == self.micro_batch_embd - 1) or (batch_id >= len(dataloader) - 1):
+                    emb_model = scale_grad(emb_model, (batch_id % self.micro_batch_embd) + 1)
+                    self.optimizer_embd.step()
+                    self.optimizer_embd.zero_grad()
+
             train_losses += loss * data.num_graphs
             num_graphs += data.num_graphs
             if self.task_type == 'classification':
                 preds.append(pred)
                 labels.append(data.y)
-            self.optimizer.step()
-            if self.optimizer_embd is not None:
-                self.optimizer_embd.step()
 
         if self.task_type == 'classification':
             preds = torch.cat(preds, dim=0) > 0.

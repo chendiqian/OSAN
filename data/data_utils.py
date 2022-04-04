@@ -1,5 +1,5 @@
 from collections import namedtuple, deque
-from typing import List
+from typing import List, Union
 
 import numba
 import numpy as np
@@ -120,3 +120,20 @@ def get_connected_components(subset, neighbor_dict):
         components.append(component)
 
     return components
+
+
+def scale_grad(model: torch.nn.Module, scalar: Union[int, float]) -> torch.nn.Module:
+    """
+    Scale down the grad, typically for accumulated grad while micro batching
+
+    :param model:
+    :param scalar:
+    :return:
+    """
+    assert scalar > 0
+
+    for p in model.parameters():
+        if p.grad is not None:
+            p.grad /= scalar
+
+    return model

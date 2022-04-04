@@ -50,10 +50,10 @@ class NetGCN(torch.nn.Module):
         self.bn1 = torch.nn.BatchNorm1d(hid_dim)
         self.params_list.append({'params': self.bn1.parameters(), 'weighted_decay': 0.})
 
-        # self.conv2 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=False)
-        # self.params_list.append({'params': self.conv2.parameters(), 'weighted_decay': 0.})
-        # self.bn2 = torch.nn.BatchNorm1d(hid_dim)
-        # self.params_list.append({'params': self.bn2.parameters(), 'weighted_decay': 0.})
+        self.conv2 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=False)
+        self.params_list.append({'params': self.conv2.parameters(), 'weighted_decay': 0.})
+        self.bn2 = torch.nn.BatchNorm1d(hid_dim)
+        self.params_list.append({'params': self.bn2.parameters(), 'weighted_decay': 0.})
 
         self.conv3 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=True)
         self.params_list.append({'params': self.conv3.parameters(), 'weighted_decay': 0.})
@@ -76,8 +76,8 @@ class NetGCN(torch.nn.Module):
 
         x, _ = self.conv1(x, data.edge_index, edge_attr)
         x = self.bn1(torch.relu(x))
-        # x, _ = self.conv2(x, data.edge_index, edge_attr)
-        # x = self.bn2(torch.relu(x))
+        x, _ = self.conv2(x, data.edge_index, edge_attr)
+        x = self.bn2(torch.relu(x))
         x, edge_attr = self.conv3(x, data.edge_index, edge_attr)
         x = self.lin_node(self.bn3(torch.relu(x)))
         edge_attr = self.lin_edge(self.bn_edge3(torch.relu(edge_attr)))

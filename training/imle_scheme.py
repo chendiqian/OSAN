@@ -6,6 +6,7 @@ from subgraph.khop_subgraph import khop_subgraphs
 from subgraph.greedy_expanding_tree import greedy_expand_tree
 from subgraph.mst_subgraph import mst_subgraph_sampling
 from subgraph.or_optimal_subgraph import get_or_suboptim_subgraphs, get_or_optim_subgraphs
+from subgraph.undirected_edge_selection import undirected_edge_sample
 
 
 def get_split_idx(inc_tensor: torch.Tensor) -> Tuple:
@@ -84,16 +85,16 @@ class IMLEScheme:
 
         sample_instance_idx = []
         for i, logit in enumerate(local_logits):
-            k = self.sample_k + logit.shape[0] if self.sample_k < 0 else self.sample_k  # e.g. -1 -> remove 1 node
-
             if self.perturb:
                 noise = torch.randn(logit.shape, device=logit.device) * logit.std(0, keepdims=True) * 0.1
                 logit = logit.clone() + noise
 
-            if self.imle_sample_policy in ['node', 'edge']:
+            if self.imle_sample_policy == 'node':
+                k = self.sample_k + logit.shape[0] if self.sample_k < 0 else self.sample_k  # e.g. -1 -> remove 1 node
                 thresh = torch.topk(logit, k=min(k, logit.shape[0]), dim=0, sorted=True).values[-1, :]  # kth largest
-                # shape (n_nodes, dim)
                 mask = (logit >= thresh[None]).to(torch.float)
+            elif self.imle_sample_policy == 'edge':
+                mask = undirected_edge_sample(self.graphs[i].edge_index, logit, self.sample_k)
             elif self.imle_sample_policy == 'khop_subgraph':
                 mask = khop_subgraphs(self.graphs[i], self.sample_k, instance_weight=logit)
             elif self.imle_sample_policy == 'mst':

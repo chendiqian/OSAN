@@ -132,6 +132,9 @@ def scale_grad(model: torch.nn.Module, scalar: Union[int, float]) -> torch.nn.Mo
     """
     assert scalar > 0
 
+    if scalar == 1:
+        return model
+
     for p in model.parameters():
         if p.grad is not None:
             p.grad /= scalar

@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, Optional
+from typing import Tuple
 from argparse import Namespace
 
 from torch_geometric.datasets import TUDataset
@@ -23,7 +23,7 @@ NAME_DICT = {'zinc': "ZINC_full",
              'alchemy': "alchemy_full"}
 
 
-def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDataLoader]]:
+def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, MYDataLoader]:
     """
 
     :param args
@@ -82,19 +82,25 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, Optional[MYDa
     # either case the batch will be [[g11, g12, g13], [g21, g22, g23], ...]
     sample_collator = (args.esan_policy != 'null') or ((not args.train_embd_model) and (args.num_subgraphs > 0))
 
+    if args.normalize_label:
+        mean = dataset.data.y.mean(dim=0, keepdim=True)
+        std = dataset.data.y.std(dim=0, keepdim=True)
+        dataset.data.y = (dataset.data.y - mean) / std
+
     if args.dataset.lower() == 'zinc':
-        train_loader = MYDataLoader(dataset[:220011][train_indices], batch_size=args.batch_size, shuffle=not args.debug,
-                                    subgraph_loader=sample_collator)
-        test_loader = MYDataLoader(dataset[220011:225011][test_indices], batch_size=args.batch_size, shuffle=False,
-                                   subgraph_loader=pre_transform is not None)
-        val_loader = MYDataLoader(dataset[225011:][val_indices], batch_size=args.batch_size, shuffle=False,
-                                  subgraph_loader=sample_collator)
+        train_set = dataset[:220011][train_indices]
+        val_set = dataset[225011:][val_indices]
+        test_set = dataset[220011:225011][test_indices]
     else:
-        train_loader = MYDataLoader(dataset[train_indices], batch_size=args.batch_size, shuffle=not args.debug,
-                                    subgraph_loader=sample_collator)
-        test_loader = MYDataLoader(dataset[test_indices], batch_size=args.batch_size, shuffle=False,
-                                   subgraph_loader=pre_transform is not None)
-        val_loader = MYDataLoader(dataset[val_indices], batch_size=args.batch_size, shuffle=False,
-                                  subgraph_loader=sample_collator)
+        train_set = dataset[train_indices]
+        val_set = dataset[val_indices]
+        test_set = dataset[test_indices]
+
+    train_loader = MYDataLoader(train_set, batch_size=args.batch_size, shuffle=not args.debug,
+                                subgraph_loader=sample_collator)
+    test_loader = MYDataLoader(test_set, batch_size=args.batch_size, shuffle=False,
+                               subgraph_loader=pre_transform is not None)
+    val_loader = MYDataLoader(val_set, batch_size=args.batch_size, shuffle=False,
+                              subgraph_loader=sample_collator)
 
     return train_loader, val_loader, test_loader

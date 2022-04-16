@@ -6,12 +6,12 @@ from .nn_utils import residual
 
 
 class GINEConv(MessagePassing):
-    def __init__(self, emb_dim, dim1, dim2, use_bias=False):
+    def __init__(self, emb_dim, dim1, dim2):
         super(GINEConv, self).__init__(aggr="add")
 
         # disable the bias, otherwise the information will be nonzero
-        self.bond_encoder = Sequential(Linear(emb_dim, dim1, bias=use_bias), ReLU(), Linear(dim1, dim1, bias=use_bias))
-        self.mlp = Sequential(Linear(dim1, dim1, bias=use_bias), ReLU(), Linear(dim1, dim2, bias=use_bias))
+        self.bond_encoder = Sequential(Linear(emb_dim, dim1), ReLU(), Linear(dim1, dim1))
+        self.mlp = Sequential(Linear(dim1, dim1), ReLU(), Linear(dim1, dim2))
         self.eps = torch.nn.Parameter(torch.Tensor([0]))
 
     def forward(self, x, edge_index, edge_attr, edge_weight):
@@ -39,20 +39,19 @@ class NetGINE(torch.nn.Module):
                  dim,
                  dropout,
                  num_convlayers,
-                 use_bias=True,
                  jk=None,
-                 num_class=None):
+                 num_class=1):
         super(NetGINE, self).__init__()
 
         self.dropout = dropout
         self.jk = jk
         assert num_convlayers > 1
 
-        self.conv = torch.nn.ModuleList([GINEConv(edge_features, input_dims, dim, use_bias)])
+        self.conv = torch.nn.ModuleList([GINEConv(edge_features, input_dims, dim)])
         self.bn = torch.nn.ModuleList([torch.nn.BatchNorm1d(dim)])
 
         for _ in range(num_convlayers - 1):
-            self.conv.append(GINEConv(edge_features, dim, dim, use_bias))
+            self.conv.append(GINEConv(edge_features, dim, dim))
             self.bn.append(torch.nn.BatchNorm1d(dim))
 
         if self.jk == 'concat':
@@ -64,10 +63,7 @@ class NetGINE(torch.nn.Module):
 
         self.fc2 = Linear(dim, dim)
         self.fc3 = Linear(dim, dim)
-        if num_class is None or num_class == 2:
-            self.fc4 = Linear(dim, 1)
-        else:
-            self.fc4 = Linear(dim, num_class)
+        self.fc4 = Linear(dim, num_class)
 
     def forward(self, data):
         x, edge_index, edge_attr, edge_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight

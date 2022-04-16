@@ -9,7 +9,7 @@ import json
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from models import NetGINE, NetGCN
+from models import NetGINE, NetGCN, NetGINEAlchemy
 from training.trainer import Trainer
 from data.get_data import get_data
 from data.const import DATASET_FEATURE_STAT_DICT
@@ -18,7 +18,8 @@ from data.const import DATASET_FEATURE_STAT_DICT
 def get_parse() -> Namespace:
     parser = argparse.ArgumentParser(description='GNN baselines')
     parser.add_argument('--model', type=str, default='gine')
-    parser.add_argument('--dataset', type=str, default='zinc')
+    parser.add_argument('--dataset', type=str, default='zinc', choices=['zinc', 'alchemy'])
+    parser.add_argument('--normalize_label', action='store_true', help='currently for Alchemy')
     parser.add_argument('--hid_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=1.e-3)
     parser.add_argument('--embd_lr', type=float, default=1.e-4)
@@ -108,12 +109,9 @@ if __name__ == '__main__':
     assert ((not args.train_embd_model) or (args.esan_policy == 'null')), "No sampling the original data with I-MLE"
     train_loader, val_loader, test_loader = get_data(args)
 
-    if args.dataset.lower() in ['zinc']:
+    if args.dataset.lower() in ['zinc', 'alchemy']:
         task_type = 'regression'
         criterion = torch.nn.L1Loss()
-    elif args.dataset.lower() in ['mutag']:
-        task_type = 'classification'
-        criterion = torch.nn.BCEWithLogitsLoss()
     else:
         raise NotImplementedError
 
@@ -142,6 +140,11 @@ if __name__ == '__main__':
                         args.num_convlayers,
                         jk=args.gnn_jk,
                         num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
+    elif args.model.lower() == 'gine_alchemy':
+        model = NetGINEAlchemy(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                               DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                               args.hid_size,
+                               num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
     else:
         raise NotImplementedError
 

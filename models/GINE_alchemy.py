@@ -5,11 +5,11 @@ from .GINE_gnn import GINEConv
 
 
 class NetGINEAlchemy(torch.nn.Module):
-    def __init__(self, input_dims, edge_features, dim, num_class):
+    def __init__(self, input_dims, edge_features, dim, num_class, num_layers):
         super(NetGINEAlchemy, self).__init__()
 
         self.conv = torch.nn.ModuleList([GINEConv(edge_features, input_dims, dim)])
-        for _ in range(5):
+        for _ in range(num_layers):
             self.conv.append(GINEConv(edge_features, dim, dim))
 
         self.set2set = Set2Set(1 * dim, processing_steps=6)

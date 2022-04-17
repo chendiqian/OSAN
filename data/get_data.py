@@ -60,7 +60,7 @@ def get_data(args: Union[Namespace, ConfigDict]) -> Tuple[MYDataLoader, MYDataLo
     if args.imle_configs is None and args.sample_configs.sample_with_esan:
         if args.sample_configs.sample_policy in ['node', 'edge']:
             assert args.sample_configs.sample_k == -1, "ESAN supports remove one substance only"
-        pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.remove_node)
+        pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.sample_configs.remove_node)
     else:
         pre_transform = lambda x: x  # no deck
 

@@ -11,7 +11,6 @@ from data.data_utils import GraphToUndirected
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler
 
-
 TRANSFORM_DICT = {'node': RawNodeSampler,
                   'edge': RawEdgeSampler,
                   'khop_subgraph': RawKhopSampler,
@@ -87,12 +86,12 @@ def get_data(args: Union[Namespace, ConfigDict]) -> Tuple[MYDataLoader, MYDataLo
             # data_path += f'/deck/{args.esan_configs.esan_policy}'
             raise NotImplementedError
         else:
-            if args.sample_configs.num_subgraphs > 0:   # sample-on-the-fly
+            if args.sample_configs.num_subgraphs > 0:  # sample-on-the-fly
                 sample_collator = True
                 transform = TRANSFORM_DICT[args.sample_configs.sample_policy](args.sample_configs.num_subgraphs,
-                                                               args.sample_configs.sample_k,
-                                                               args.sample_configs.remove_node,
-                                                               args.sample_configs.add_full_graph)
+                                                                              args.sample_configs.sample_k,
+                                                                              args.sample_configs.remove_node,
+                                                                              args.sample_configs.add_full_graph)
 
     # ==============================================================================
     # get dataset
@@ -120,7 +119,7 @@ def get_data(args: Union[Namespace, ConfigDict]) -> Tuple[MYDataLoader, MYDataLo
     train_loader = MYDataLoader(train_set, batch_size=args.batch_size, shuffle=not args.debug,
                                 subgraph_loader=sample_collator)
     test_loader = MYDataLoader(test_set, batch_size=args.batch_size, shuffle=False,
-                               subgraph_loader=pre_transform is not None)
+                               subgraph_loader=sample_collator)
     val_loader = MYDataLoader(val_set, batch_size=args.batch_size, shuffle=False,
                               subgraph_loader=sample_collator)
 

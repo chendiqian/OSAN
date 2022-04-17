@@ -10,7 +10,7 @@ from data.data_utils import edgeindex2neighbordict
 
 
 @numba.njit(cache=True, locals={'edge_mask': numba.bool_[::1], 'np_node_idx': numba.int64[::1]})
-def numba_k_hop_subgraph(edge_index: np.ndarray, seed_node: int, khop: int, num_nodes: int, relabel: bool)\
+def numba_k_hop_subgraph(edge_index: np.ndarray, seed_node: int, khop: int, num_nodes: int, relabel: bool) \
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     k_hop_subgraph of PyG is too slow
@@ -59,29 +59,37 @@ def numba_k_hop_subgraph(edge_index: np.ndarray, seed_node: int, khop: int, num_
     return np_node_idx, edge_index, edge_mask
 
 
-@numba.njit(cache=True, parallel=True)
-def parallel_k_hop_neighbor(edge_index: np.ndarray, num_nodes: int, khop: int, relabel: bool):
+@numba.njit(cache=True, parallel=False)
+def parallel_k_hop_neighbor(edge_index: np.ndarray,
+                            instance_weight: np.array,
+                            num_nodes: int,
+                            khop: int,
+                            relabel: bool):
     """
 
     :param edge_index:
+    :param instance_weight:
     :param num_nodes:
     :param khop:
     :param relabel:
     :return:
     """
-    nodes = [np.ones(0, dtype=np.int64) for _ in range(num_nodes)]
+    nodes = np.zeros(0, dtype=np.int64)
+    best_ref = -1.e10
 
-    for i in numba.prange(num_nodes):
-        node_idx, _edge_index, edge_mask = numba_k_hop_subgraph(edge_index, numba.int64(i), khop, num_nodes, False)
-        nodes[i] = node_idx
+    for i in range(num_nodes):
+        node_idx, _, _ = numba_k_hop_subgraph(edge_index, numba.int64(i), khop, num_nodes, relabel)
+        ref = instance_weight[node_idx].sum()
+        if ref > best_ref:
+            best_ref = ref
+            nodes = node_idx
 
     return nodes
 
 
 def khop_subgraphs(graph: Data,
                    khop: int = 3,
-                   instance_weight: Optional[Tensor] = None,
-                   prune_policy: str = None) -> Tensor:
+                   instance_weight: Optional[Tensor] = None) -> Tensor:
     """
     Code for IMLE scheme, not sample on the fly
     For each seed node, get the k-hop neighbors first, then prune the graph as e.g. max spanning tree
@@ -93,7 +101,6 @@ def khop_subgraphs(graph: Data,
     :param instance_weight: if not pruning, this should be node weight, so that the seed node is picked according to
     the highest node weight. if pruning with MST algorithm, this should be edge weight, and node weight is the scatter
      of the incident edge weights
-    :param prune_policy:
     :return: return node mask if not pruned, else edge mask
     """
     sampled_masks = torch.zeros_like(instance_weight, dtype=torch.float32, device=instance_weight.device)
@@ -103,6 +110,30 @@ def khop_subgraphs(graph: Data,
 
     for i, idx in enumerate(indices):
         _node_idx, _edge_index, edge_mask = numba_k_hop_subgraph(edge_index, idx, khop, graph.num_nodes, False)
+        sampled_masks[_node_idx, i] = 1.0
+
+    return sampled_masks
+
+
+def khop_global(graph: Data,
+                khop: int = 3,
+                instance_weight: Optional[Tensor] = None) -> Tensor:
+    """
+
+    :param graph:
+    :param khop:
+    :param instance_weight: if not pruning, this should be node weight, so that the seed node is picked according to
+    the highest node weight. if pruning with MST algorithm, this should be edge weight, and node weight is the scatter
+     of the incident edge weights
+    :return: return node mask if not pruned, else edge mask
+    """
+    sampled_masks = torch.zeros_like(instance_weight, dtype=torch.float32, device=instance_weight.device)
+    instance_weight = instance_weight.cpu().numpy()
+
+    edge_index = graph.edge_index.cpu().numpy()
+
+    for i in range(instance_weight.shape[1]):
+        _node_idx = parallel_k_hop_neighbor(edge_index, instance_weight[:, i], graph.num_nodes, khop, False)
         sampled_masks[_node_idx, i] = 1.0
 
     return sampled_masks

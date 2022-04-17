@@ -1,10 +1,10 @@
-import argparse
+from typing import Tuple, Union
 import logging
-from logging import Logger
 import os
-from argparse import Namespace
 from datetime import datetime
-import json
+import yaml
+from ml_collections import ConfigDict
+from sacred import Experiment
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -15,67 +15,10 @@ from data.get_data import get_data
 from data.const import DATASET_FEATURE_STAT_DICT
 
 
-def get_parse() -> Namespace:
-    parser = argparse.ArgumentParser(description='GNN baselines')
-    parser.add_argument('--model', type=str, default='gine')
-    parser.add_argument('--dataset', type=str, default='zinc', choices=['zinc', 'alchemy'])
-    parser.add_argument('--normalize_label', action='store_true', help='currently for Alchemy')
-    parser.add_argument('--hid_size', type=int, default=256)
-    parser.add_argument('--lr', type=float, default=1.e-3)
-    parser.add_argument('--embd_lr', type=float, default=1.e-4)
-    parser.add_argument('--patience', type=int, default=100, help='for early stop')
-    parser.add_argument('--lr_patience', type=int, default=20)
-    parser.add_argument('--dropout', type=float, default=0.)
-    parser.add_argument('--reg', type=float, default=0.)
-    parser.add_argument('--reg_embd', type=float, default=0.)
-    parser.add_argument('--num_convlayers', type=int, default=4)
-    parser.add_argument('--gnn_jk', type=str, default=None, choices=[None, 'concat', 'residual'])
-    parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--epochs', type=int, default=20)
-    parser.add_argument('--data_path', type=str, default='./datasets')
-    parser.add_argument('--log_path', type=str, default='./logs')
-    parser.add_argument('--save_freq', type=int, default=100)
-
-    parser.add_argument('--remove_node', action='store_true', help='if true, the nodes are discarded wrt node '
-                                                                   'masks, otherwise keep the nodes for forward pass '
-                                                                   'and graph pooling. Only works for node-based '
-                                                                   'sampling methods. ')
-    parser.add_argument('--add_full_graph', action='store_true', help='if true, add the original graph into the batch')
-
-    # I-MLE
-    parser.add_argument('--sample_policy', type=str, default='node',
-                        choices=['node', 'edge', 'khop_subgraph', 'mst', 'greedy_exp', 'or', 'or_optim'])
-    parser.add_argument('--sample_k', type=int, default=-1, help='Instance to be sampled, can be num nodes, num edges '
-                                                                 'or k-hop neigbors')
-    parser.add_argument('--num_subgraphs', type=int, default=5, help='number of subgraphs to sample for a graph')
-    parser.add_argument('--train_embd_model', action='store_true', help='get differentiable logits')
-    parser.add_argument('--imle_sample_rand', action='store_true', help='when true, randomly sample during training, '
-                                                                        'otherwise sample max during training.')
-    parser.add_argument('--micro_batch_embd', type=int, default=1, help='update the embedding model once while '
-                                                                        'updating the downstream model # times')
-    parser.add_argument('--norm_logits', action='store_true', help='when true, normalize the digits of embedding model')
-    parser.add_argument('--noise_scale', type=float, default=1.)
-    parser.add_argument('--beta', type=float, default=10.)
-    parser.add_argument('--aux_loss_weight', type=float, default=0.)
-
-    # ESAN
-    parser.add_argument('--esan_policy', type=str, default='null', choices=['null', 'node_deleted', 'edge_deleted'])
-    parser.add_argument('--sample_mode', type=str, default='int', choices=['float', 'int'], help="Only for baselines "
-                                                                                                 "e.g. ESAN sampling, "
-                                                                                                 "choose subgraphs by "
-                                                                                                 "fraction or number "
-                                                                                                 "k")
-    parser.add_argument('--esan_frac', type=float, default=0.1, help="Only for baselines, see --sample_mode")
-    parser.add_argument('--esan_k', type=int, default=3, help="Only for baselines, see --sample_mode")
-    parser.add_argument('--voting', type=int, default=5, help="Random sampling for majority")
-
-    parser.add_argument('--debug', action='store_true', help='when debugging, take a small subset of the datasets')
-
-    args = parser.parse_args()
-    return args
+ex = Experiment()
 
 
-def get_logger(folder_path: str) -> Logger:
+def get_logger(folder_path: str) -> logging.Logger:
     logger = logging.getLogger('myapp')
     hdlr = logging.FileHandler(os.path.join(folder_path, 'mylog.log'))
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
@@ -85,35 +28,29 @@ def get_logger(folder_path: str) -> Logger:
     return logger
 
 
-def naming(args: Namespace) -> str:
-    name = f'{args.dataset}_' \
+def naming(args) -> str:
+    name = f'{args.dataset}_{args.model}_'
 
-    if args.esan_policy == 'null':
-        if args.num_subgraphs == 0:
-            name += 'normal_train_'
-        else:
-            name += f'policy_{args.sample_policy}_' \
-                    f'n_subg_{args.num_subgraphs}_' \
-                    f'IMLE_{args.train_embd_model}_' \
-                    f'samplek_{args.sample_k}_'
+    if args.imle_configs is not None:
+        name += 'IMLE_'
+    elif args.sample_configs.sample_with_esan:
+        name += 'ESAN_'
+    elif args.sample_configs.num_subgraphs == 0:
+        name += 'normal_train_'
     else:
-        name += f'esanpolicy_{args.esan_policy}_' \
-                f'esan_{args.esan_frac if args.sample_mode == "float" else args.esan_k}_'
+        name += 'OnTheFly_'
+
+    name += f'policy_{args.sample_configs.sample_policy}_'
+    name += f'samplek_{args.sample_configs.sample_k}_'
+    name += f'subg_{args.sample_configs.num_subgraphs}_'
+    name += f'rm_node_{args.sample_configs.remove_node}_'
+    name += f'fullg_{args.sample_configs.add_full_graph}'
 
     return name
 
 
-if __name__ == '__main__':
-    args = get_parse()
-
-    assert ((not args.train_embd_model) or (args.esan_policy == 'null')), "No sampling the original data with I-MLE"
-    train_loader, val_loader, test_loader = get_data(args)
-
-    if args.dataset.lower() in ['zinc', 'alchemy']:
-        task_type = 'regression'
-        criterion = torch.nn.L1Loss()
-    else:
-        raise NotImplementedError
+def prepare_exp(args) -> Tuple[ConfigDict, SummaryWriter, logging.Logger, str]:
+    args = ConfigDict(args)
 
     hparams = naming(args)
 
@@ -126,8 +63,23 @@ if __name__ == '__main__':
     writer = SummaryWriter(folder_name)
     logger = get_logger(folder_name)
 
-    with open(os.path.join(folder_name, 'hparams.txt'), 'w') as f:
-        json.dump(args.__dict__, f, indent=4)
+    with open(os.path.join(folder_name, 'config.yaml'), 'w') as outfile:
+        yaml.dump(args.to_dict(), outfile, default_flow_style=False)
+
+    return args, writer, logger, folder_name
+
+
+@ex.automain
+def run(fixed):
+    args, writer, logger, folder_name = prepare_exp(fixed)
+
+    train_loader, val_loader, test_loader = get_data(args)
+
+    if args.dataset.lower() in ['zinc', 'alchemy']:
+        task_type = 'regression'
+        criterion = torch.nn.L1Loss()
+    else:
+        raise NotImplementedError
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f'Using device: {device}')
@@ -144,17 +96,20 @@ if __name__ == '__main__':
         model = NetGINEAlchemy(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                                DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                                args.hid_size,
-                               num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
+                               num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
+                               num_layers=args.num_convlayers).to(device)
     else:
         raise NotImplementedError
 
-    if args.train_embd_model:
+    if args.imle_configs is not None:
         emb_model = NetGCN(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
-                           args.num_subgraphs,
-                           args.norm_logits).to(device)
-        optimizer_embd = torch.optim.Adam(emb_model.params_list, lr=args.embd_lr, weight_decay=args.reg_embd)
+                           args.sample_configs.num_subgraphs,
+                           args.imle_configs.norm_logits).to(device)
+        optimizer_embd = torch.optim.Adam(emb_model.params_list,
+                                          lr=args.imle_configs.embd_lr,
+                                          weight_decay=args.imle_configs.reg_embd)
         scheduler_embd = None
     else:
         emb_model = None
@@ -164,28 +119,20 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.reg)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [400, 600], gamma=0.1 ** 0.5)
     trainer = Trainer(task_type=task_type,
-                      imle_sample_policy=args.sample_policy,
-                      aux_loss_weight=args.aux_loss_weight,
-                      sample_k=args.sample_k,
-                      remove_node=args.remove_node,
-                      add_full_graph=args.add_full_graph,
                       voting=args.voting,
                       max_patience=args.patience,
                       optimizer=(optimizer, optimizer_embd),
                       scheduler=(scheduler, scheduler_embd),
                       criterion=criterion,
-                      train_embd_model=args.train_embd_model,
-                      imle_sample_rand=args.imle_sample_rand,
-                      micro_batch_embd=args.micro_batch_embd,
-                      noise_scale=args.noise_scale,
-                      beta=args.beta,
-                      device=device)
+                      device=device,
+                      imle_configs=args.imle_configs,
+                      **args.sample_configs)
 
-    for epoch in range(args.epochs):
+    for epoch in range(args.max_epochs):
         train_loss, train_acc = trainer.train(train_loader, emb_model, model)
         val_loss, val_acc, early_stop = trainer.validation(val_loader, emb_model, model)
 
-        if epoch > 700 and early_stop:
+        if epoch > args.min_epochs and early_stop:
             logger.info('early stopping')
             break
 
@@ -205,12 +152,12 @@ if __name__ == '__main__':
 
         if epoch % args.save_freq == 0:
             torch.save(model.state_dict(), f'{folder_name}/model{epoch}.pt')
-            if args.train_embd_model:
+            if emb_model is not None:
                 torch.save(emb_model.state_dict(), f'{folder_name}/embd_model{epoch}.pt')
 
     logger.info(f'Best val loss: {trainer.best_val_loss}')
     logger.info(f'Best val acc: {trainer.best_val_acc}')
     trainer.save_curve(folder_name)
-    if args.train_embd_model:
+    if emb_model is not None:
         torch.save(emb_model.state_dict(), f'{folder_name}/embd_model_final.pt')
     torch.save(model.state_dict(), f'{folder_name}/model_final.pt')

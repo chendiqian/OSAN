@@ -3,6 +3,7 @@ import os
 import pickle
 from collections import defaultdict
 from typing import Union, Optional
+from ml_collections import ConfigDict
 
 import torch.linalg
 from torch.utils.data import DataLoader as TorchDataLoader
@@ -33,51 +34,39 @@ Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 class Trainer:
     def __init__(self,
                  task_type: str,
-                 imle_sample_policy: str,
-                 aux_loss_weight: float,
-                 sample_k: int,
-                 remove_node: bool,
-                 add_full_graph: bool,
                  voting: int,
                  max_patience: int,
                  optimizer: Tuple[Optimizer, Optional[Optimizer]],
                  scheduler: Tuple[Scheduler, Optional[Scheduler]],
                  criterion: Loss,
-                 train_embd_model: bool,
-                 imle_sample_rand: bool,
-                 micro_batch_embd: int,
-                 noise_scale: float,
-                 beta: float,
-                 device: Union[str, torch.device]):
+                 device: Union[str, torch.device],
+                 imle_configs: ConfigDict,
+
+                 sample_policy: str = 'node',
+                 sample_k: int = -1,
+                 remove_node: bool = True,
+                 add_full_graph: bool = True,
+                 **kwargs):
         """
 
         :param task_type:
-        :param imle_sample_policy:
-        :param aux_loss_weight:
-        :param sample_k: sample nodes or edges
-        :param remove_node:
-        :param add_full_graph:
         :param voting:
         :param max_patience:
         :param optimizer:
         :param scheduler:
         :param criterion:
-        :param train_embd_model:
-        :param imle_sample_rand:
-        :param micro_batch_embd:
-        :param noise_scale:
-        :param beta:
         :param device:
+        :param imle_configs:
+        :param sample_policy:
+        :param sample_k:
+        :param remove_node:
+        :param add_full_graph:
+        :param kwargs:
         """
         super(Trainer, self).__init__()
 
         self.task_type = task_type
         self.voting = voting
-        self.imle_sample_policy = imle_sample_policy
-        self.aux_loss_weight = aux_loss_weight
-        self.sample_k = sample_k
-        self.remove_node = remove_node
-        self.add_full_graph = add_full_graph
         self.optimizer, self.optimizer_embd = optimizer
         self.scheduler, self.scheduler_embd = scheduler
         self.criterion = criterion
@@ -90,20 +79,24 @@ class Trainer:
 
         self.curves = defaultdict(list)
 
-        if train_embd_model:
-            self.imle_sample_rand = imle_sample_rand
-            self.micro_batch_embd = micro_batch_embd
+        if imle_configs is not None:   # need to cache some configs, otherwise everything's in the dataloader already
+            self.aux_loss_weight = imle_configs.aux_loss_weight
+            self.imle_sample_rand = imle_configs.imle_sample_rand
+            self.micro_batch_embd = imle_configs.micro_batch_embd
+            self.imle_sample_policy = sample_policy
+            self.remove_node = remove_node
+            self.add_full_graph = add_full_graph
             self.temp = 1.
-            self.target_distribution = TargetDistribution(alpha=1.0, beta=beta)
-            self.noise_distribution = GumbelDistribution(0., noise_scale, self.device)
-            self.noise_scale_scheduler = BaseScheduler(noise_scale)
-            self.imle_scheduler = IMLEScheme(self.imle_sample_policy,
+            self.target_distribution = TargetDistribution(alpha=1.0, beta=imle_configs.beta)
+            self.noise_distribution = GumbelDistribution(0., imle_configs.noise_scale, self.device)
+            self.noise_scale_scheduler = BaseScheduler(imle_configs.noise_scale)
+            self.imle_scheduler = IMLEScheme(sample_policy,
                                              None,
                                              None,
-                                             self.sample_k,
+                                             sample_k,
                                              return_list=False,
                                              perturb=False,
-                                             sample_rand=imle_sample_rand)
+                                             sample_rand=imle_configs.imle_sample_rand)
 
     def get_aux_loss(self, logits: torch.Tensor):
         """

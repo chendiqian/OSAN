@@ -5,6 +5,7 @@
 import math
 import random
 from typing import List, Callable, Optional, Union
+from ml_collections import ConfigDict
 
 import torch
 from torch_geometric.data import Batch, Data
@@ -70,25 +71,30 @@ class RawMSTSampler(SamplerOnTheFly):
 
 
 class DeckSampler:
-    def __init__(self, mode: str, fraction: float, num_subgraph: int, add_full_graph: bool = False):
+    def __init__(self, esan_configs: ConfigDict, add_full_graph: bool = False):
         """
         Sample subgraphs from a full deck (given by the dataset[idx])
 
-        :param mode: Either fraction or k subgraphs
-        :param fraction:
-        :param num_subgraph:
+        :param esan_configs:
+        :param add_full_graph:
         """
-        assert mode in ['float', 'int']
-        self.mode = mode
-        self.fraction = fraction
-        self.num_subgraph = num_subgraph
+        assert esan_configs.mode in ['float', 'int']
+        if esan_configs.mode == 'float':
+            assert 0. < esan_configs.sample_k <= 1.
+        elif esan_configs.mode == 'int':
+            assert esan_configs.sample_k >= 1
+        else:
+            raise ValueError(f'Unsupported mode: {esan_configs.mode}')
+
+        self.mode = esan_configs.mode
+        self.sample_k = esan_configs.sample_k
         self.add_full_graph = add_full_graph
 
     def __call__(self, batch: Union[Data, Batch]) -> List[Data]:
         # the first is original graph
         data_list = Batch.to_data_list(batch)
         graph, subgraphs = data_list[0], data_list[1:]
-        count = math.ceil(self.fraction * len(subgraphs)) if self.mode == 'float' else self.num_subgraph
+        count = math.ceil(self.sample_k * len(subgraphs)) if self.mode == 'float' else self.sample_k
         sampled_subgraphs = random.sample(subgraphs, count) if count < len(subgraphs) else subgraphs
         if self.add_full_graph:
             sampled_subgraphs.append(graph)
@@ -166,7 +172,7 @@ class EdgeDeleted(Graph2Subgraph):
 
 def policy2transform(policy: str,
                      process_subgraphs: Callable = None,
-                     relabel: bool = False) -> Union[Graph2Subgraph, Callable]:
+                     relabel: bool = False) -> Graph2Subgraph:
     """
     Pre-transform for datasets
     e.g. make a deck of subgraphs for the original graph, each with size n - 1
@@ -174,14 +180,11 @@ def policy2transform(policy: str,
     :param policy:
     :param process_subgraphs:
     :param relabel:
-    :param add_full_graph:
     :return:
     """
-    if policy == "node_deleted":
+    if policy == "node":
         return NodeDeleted(process_subgraphs=process_subgraphs, remove_node=relabel)
-    elif policy == 'edge_deleted':
+    elif policy == 'edge':
         return EdgeDeleted(process_subgraphs=process_subgraphs)
-    elif policy == 'null':
-        return lambda x: x
     else:
         raise ValueError("Invalid subgraph policy type")

@@ -1,0 +1,29 @@
+fixed:
+  model: gine
+  dataset: zinc
+  normalize_label: False
+  hid_size: 256
+  lr: 1.e-3
+  patience: 100
+  dropout: 0.
+  reg: 0.
+  num_convlayers: 4
+  gnn_jk: 'residual'
+  batch_size: 128
+  min_epochs: 700
+  max_epochs: 1000
+  data_path: './datasets'
+  log_path: './logs'
+  save_freq: 100
+  voting: 1
+  debug: False
+
+  sample_configs:
+    sample_policy: null
+    sample_k: null
+    num_subgraphs: 0
+    remove_node: null
+    add_full_graph: null
+    sample_with_esan: False
+
+  imle_configs: null

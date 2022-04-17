@@ -1,14 +1,14 @@
 import os
-from typing import Tuple
+from typing import Tuple, Union
 from argparse import Namespace
+from ml_collections import ConfigDict
 
 from torch_geometric.datasets import TUDataset
 from torch_geometric.transforms import Compose
 
 from data.custom_dataloader import MYDataLoader
-from data.custom_datasets import CustomTUDataset
 from data.data_utils import GraphToUndirected
-from subgraph.subgraph_policy import policy2transform, DeckSampler, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
+from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler
 
 
@@ -23,7 +23,7 @@ NAME_DICT = {'zinc': "ZINC_full",
              'alchemy': "alchemy_full"}
 
 
-def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, MYDataLoader]:
+def get_data(args: Union[Namespace, ConfigDict]) -> Tuple[MYDataLoader, MYDataLoader, MYDataLoader]:
     """
 
     :param args
@@ -32,6 +32,8 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, MYDataLoader]
     if not os.path.isdir(args.data_path):
         os.mkdir(args.data_path)
 
+    # ============================================================================
+    # Get reference indices in each split
     infile = open(f"./datasets/indices/{args.dataset.lower()}/test.index.txt", "r")
     line = next(iter(infile))
     test_indices = line.split(",")
@@ -53,40 +55,59 @@ def get_data(args: Namespace) -> Tuple[MYDataLoader, MYDataLoader, MYDataLoader]
         train_indices = train_indices[:16]
     train_indices = [int(i) for i in train_indices]
 
+    # =============================================================================
+    # get pre_transform: to_directed + create ESAN deck
+    if args.imle_configs is None and args.sample_configs.sample_with_esan:
+        if args.sample_configs.sample_policy in ['node', 'edge']:
+            assert args.sample_configs.sample_k == -1, "ESAN supports remove one substance only"
+        pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.remove_node)
+    else:
+        pre_transform = lambda x: x  # no deck
+
     if args.dataset.lower() == 'zinc':
         # for my version of PyG, ZINC is directed
-        pre_transform = Compose([GraphToUndirected(),
-                                 policy2transform(args.esan_policy,
-                                                  relabel=args.remove_node)])
+        pre_transform = Compose([GraphToUndirected(), pre_transform])
     elif args.dataset.lower() in ['alchemy']:
-        pre_transform = policy2transform(args.esan_policy,
-                                         relabel=args.remove_node)
+        pass
     else:
         raise NotImplementedError
 
-    if args.esan_policy == 'null':  # I-MLE, or normal training, or sample on the fly
-        transform = None
-        if (not args.train_embd_model) and (args.num_subgraphs > 0):  # sample-on-the-fly
-            transform = TRANSFORM_DICT[args.sample_policy](args.num_subgraphs,
-                                                           args.sample_k,
-                                                           args.remove_node,
-                                                           args.add_full_graph)
-        dataset = TUDataset(args.data_path, transform=transform, name=NAME_DICT[args.dataset.lower()],
-                            pre_transform=pre_transform)
-    else:  # ESAN: sample from the deck
-        transform = DeckSampler(args.sample_mode, args.esan_frac, args.esan_k, add_full_graph=args.add_full_graph)
-        dataset = CustomTUDataset(args.data_path + f'/deck/{args.esan_policy}', name=NAME_DICT[args.dataset.lower()],
-                                  transform=transform, pre_transform=pre_transform)
+    # ==============================================================================
+    # get transform: ESAN -> sample from deck; IMLE or normal -> None; On the fly -> customed function
+    transform = None
+    dataset_func = TUDataset
+    data_path = args.data_path
+    sample_collator = False
 
-    # use subgraph collator when sample from deck or a graph
-    # either case the batch will be [[g11, g12, g13], [g21, g22, g23], ...]
-    sample_collator = (args.esan_policy != 'null') or ((not args.train_embd_model) and (args.num_subgraphs > 0))
+    if args.imle_configs is None:
+        if args.sample_configs.sample_with_esan:
+            # sample_collator = True
+            # transform = DeckSampler(args.esan_configs, add_full_graph=args.add_full_graph)
+            # dataset_func = CustomTUDataset
+            # data_path += f'/deck/{args.esan_configs.esan_policy}'
+            raise NotImplementedError
+        else:
+            if args.sample_configs.num_subgraphs > 0:   # sample-on-the-fly
+                sample_collator = True
+                transform = TRANSFORM_DICT[args.sample_configs.sample_policy](args.sample_configs.num_subgraphs,
+                                                               args.sample_configs.sample_k,
+                                                               args.sample_configs.remove_node,
+                                                               args.sample_configs.add_full_graph)
+
+    # ==============================================================================
+    # get dataset
+    dataset = dataset_func(data_path,
+                           name=NAME_DICT[args.dataset.lower()],
+                           transform=transform,
+                           pre_transform=pre_transform)
 
     if args.normalize_label:
         mean = dataset.data.y.mean(dim=0, keepdim=True)
         std = dataset.data.y.std(dim=0, keepdim=True)
         dataset.data.y = (dataset.data.y - mean) / std
 
+    # ==============================================================================
+    # get split
     if args.dataset.lower() == 'zinc':
         train_set = dataset[:220011][train_indices]
         val_set = dataset[225011:][val_indices]

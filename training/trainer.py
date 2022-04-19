@@ -24,7 +24,7 @@ from models import NetGINE, NetGCN
 
 Optimizer = Union[torch.optim.Adam,
                   torch.optim.SGD]
-Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau, 
+Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau,
                   torch.optim.lr_scheduler.MultiStepLR]
 Emb_model = Union[NetGCN]
 Train_model = Union[NetGINE]
@@ -79,7 +79,7 @@ class Trainer:
 
         self.curves = defaultdict(list)
 
-        if imle_configs is not None:   # need to cache some configs, otherwise everything's in the dataloader already
+        if imle_configs is not None:  # need to cache some configs, otherwise everything's in the dataloader already
             self.aux_loss_weight = imle_configs.aux_loss_weight
             self.imle_sample_rand = imle_configs.imle_sample_rand
             self.micro_batch_embd = imle_configs.micro_batch_embd
@@ -110,7 +110,7 @@ class Trainer:
         loss = ((logits.t() @ logits) * eye).mean()
         return loss * self.aux_loss_weight
 
-    def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool)\
+    def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool) \
             -> Tuple[Union[Data, Batch], Optional[torch.FloatType]]:
         """
         Common forward propagation for train and val, only called when embedding model is trained.
@@ -237,10 +237,11 @@ class Trainer:
         return train_loss, train_acc
 
     @torch.no_grad()
-    def validation(self,
-                   dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
-                   emb_model: Emb_model,
-                   model: Train_model, ):
+    def inference(self,
+                  dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
+                  emb_model: Emb_model,
+                  model: Train_model,
+                  test: bool = False):
         if emb_model is not None:
             emb_model.eval()
             self.imle_scheduler.return_list = True
@@ -274,33 +275,35 @@ class Trainer:
             preds = torch.cat(preds, dim=0) > 0.
             labels = torch.cat(labels, dim=0)
             val_acc = ((preds == labels).sum() / labels.numel()).item()
-            self.curves['val_acc'].append(val_acc)
-            self.best_val_acc = max(self.best_val_acc, val_acc)
+            if not test:
+                self.curves['val_acc'].append(val_acc)
+                self.best_val_acc = max(self.best_val_acc, val_acc)
         else:
             val_acc = None
 
         val_loss = val_losses.item() / num_graphs
 
-        if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            self.scheduler.step(val_loss)
-        else:
-            self.scheduler.step()
-        if self.scheduler_embd is not None:
-            if isinstance(self.scheduler_embd, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                self.scheduler_embd.step(val_loss)
-            else:
-                self.scheduler_embd.step()
-
         early_stop = False
-        if val_loss < self.best_val_loss:
-            self.best_val_loss = val_loss
-            self.patience = 0
-        else:
-            self.patience += 1
-            if self.patience > self.max_patience:
-                early_stop = True
+        if not test:
+            if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                self.scheduler.step(val_loss)
+            else:
+                self.scheduler.step()
+            if self.scheduler_embd is not None:
+                if isinstance(self.scheduler_embd, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    self.scheduler_embd.step(val_loss)
+                else:
+                    self.scheduler_embd.step()
 
-        self.curves['val_loss'].append(val_loss)
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                self.patience = 0
+            else:
+                self.patience += 1
+                if self.patience > self.max_patience:
+                    early_stop = True
+
+            self.curves['val_loss'].append(val_loss)
 
         if emb_model is not None:
             del self.imle_scheduler.graphs

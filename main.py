@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Tuple
 import logging
 import os
 from datetime import datetime
@@ -128,9 +128,10 @@ def run(fixed):
                       imle_configs=args.imle_configs,
                       **args.sample_configs)
 
+    best_epoch = 0
     for epoch in range(args.max_epochs):
         train_loss, train_acc = trainer.train(train_loader, emb_model, model)
-        val_loss, val_acc, early_stop = trainer.validation(val_loader, emb_model, model)
+        val_loss, val_acc, early_stop = trainer.inference(val_loader, emb_model, model, test=False)
 
         if epoch > args.min_epochs and early_stop:
             logger.info('early stopping')
@@ -155,9 +156,22 @@ def run(fixed):
             if emb_model is not None:
                 torch.save(emb_model.state_dict(), f'{folder_name}/embd_model{epoch}.pt')
 
+        if trainer.patience == 0:
+            best_epoch = epoch
+            torch.save(model.state_dict(), f'{folder_name}/model_best.pt')
+            if emb_model is not None:
+                torch.save(emb_model.state_dict(), f'{folder_name}/embd_model_best.pt')
+
+    model.load_state_dict(torch.load(f'{folder_name}/model_best.pt'))
+    logger.info(f'loaded best model at epoch {best_epoch}')
+    model.eval()
+    if emb_model is not None:
+        emb_model.load_state_dict(torch.load(f'{folder_name}/embd_model_best.pt'))
+        emb_model.eval()
+
+    test_loss, test_acc, _ = trainer.inference(test_loader, emb_model, model, test=True)
     logger.info(f'Best val loss: {trainer.best_val_loss}')
     logger.info(f'Best val acc: {trainer.best_val_acc}')
+    logger.info(f'test loss: {test_loss}')
+    logger.info(f'test acc: {test_acc}')
     trainer.save_curve(folder_name)
-    if emb_model is not None:
-        torch.save(emb_model.state_dict(), f'{folder_name}/embd_model_final.pt')
-    torch.save(model.state_dict(), f'{folder_name}/model_final.pt')

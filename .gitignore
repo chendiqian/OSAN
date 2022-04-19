@@ -2,4 +2,5 @@
 .idea
 __pycache__
 datasets
-logs
+*logs*
+*egg-info*

@@ -17,6 +17,7 @@ fixed:
   save_freq: 100
   voting: 5
   debug: False
+  num_runs: 5
 
   sample_configs:
     sample_policy: node

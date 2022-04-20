@@ -169,8 +169,6 @@ def run(fixed):
             if val_acc is not None:
                 writer.add_scalar('acc/valacc', val_acc, epoch)
 
-            print(scheduler.optimizer.param_groups[0]['lr'])
-
             if epoch % args.save_freq == 0:
                 torch.save(model.state_dict(), f'{run_folder}/model{epoch}.pt')
                 if emb_model is not None:
@@ -197,6 +195,8 @@ def run(fixed):
         logger.info(f'Best val acc: {trainer.best_val_acc}')
         logger.info(f'test loss: {test_loss}')
         logger.info(f'test acc: {test_acc}')
+        logger.info(f'max_memory_allocated: {torch.cuda.max_memory_allocated()}')
+        logger.info(f'memory_allocated: {torch.cuda.memory_allocated()}')
 
         best_val_losses.append(trainer.best_val_loss)
         test_losses.append(test_loss)

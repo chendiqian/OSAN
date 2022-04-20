@@ -1,5 +1,7 @@
+import pdb
+
 import torch
-from torch.nn import Sequential, Linear, ReLU
+from torch.nn import Linear, ReLU
 from torch_geometric.nn import global_mean_pool, MessagePassing
 
 from .nn_utils import residual
@@ -10,17 +12,20 @@ class GINEConv(MessagePassing):
         super(GINEConv, self).__init__(aggr="add")
 
         # disable the bias, otherwise the information will be nonzero
-        self.bond_encoder = Sequential(Linear(emb_dim, dim1), ReLU(), Linear(dim1, dim1))
-        self.mlp = Sequential(Linear(dim1, dim1), ReLU(), Linear(dim1, dim2))
+        self.bond_encoder = torch.nn.ModuleList([Linear(emb_dim, dim1), ReLU(), Linear(dim1, dim1)])
+        self.mlp = torch.nn.ModuleList([Linear(dim1, dim1), ReLU(), Linear(dim1, dim2)])
         self.eps = torch.nn.Parameter(torch.Tensor([0]))
 
     def forward(self, x, edge_index, edge_attr, edge_weight):
         if edge_weight is not None and edge_weight.ndim < 2:
             edge_weight = edge_weight[:, None]
 
-        edge_embedding = self.bond_encoder(edge_attr)
-        out = self.mlp((1 + self.eps) * x +
-                       self.propagate(edge_index, x=x, edge_attr=edge_embedding, edge_weight=edge_weight))
+        edge_embedding = edge_attr
+        for l in self.bond_encoder:
+            edge_embedding = l(edge_embedding)
+        out = (1 + self.eps) * x + self.propagate(edge_index, x=x, edge_attr=edge_embedding, edge_weight=edge_weight)
+        for l in self.mlp:
+            out = l(out)
 
         return out
 
@@ -31,6 +36,15 @@ class GINEConv(MessagePassing):
 
     def update(self, aggr_out):
         return aggr_out
+
+    def reset_parameters(self):
+        for l in self.bond_encoder:
+            if isinstance(l, torch.nn.Linear):
+                l.reset_parameters()
+        for l in self.mlp:
+            if isinstance(l, torch.nn.Linear):
+                l.reset_parameters()
+        self.eps = torch.nn.Parameter(torch.Tensor([0]).to(self.eps.device))
 
 
 class NetGINE(torch.nn.Module):
@@ -100,3 +114,13 @@ class NetGINE(torch.nn.Module):
         if x.shape[-1] == 1:
             x = x.reshape(-1)
         return x
+
+    def reset_parameters(self):
+        for l in self.conv:
+            l.reset_parameters()
+        for l in self.bn:
+            l.reset_parameters()
+        self.fc1.reset_parameters()
+        self.fc2.reset_parameters()
+        self.fc3.reset_parameters()
+        self.fc4.reset_parameters()

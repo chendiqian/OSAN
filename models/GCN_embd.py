@@ -38,38 +38,45 @@ class GCNConv(MessagePassing):
     def update(self, aggr_out):
         return aggr_out
 
+    def reset_parameters(self):
+        self.linear.reset_parameters()
+        self.edge_encoder.reset_parameters()
+        if self.update_edge:
+            self.edge_updating.reset_parameters()
+
 
 class NetGCN(torch.nn.Module):
     def __init__(self, input_dim, edge_features, hid_dim, emb_dim, normalize=False):
         super(NetGCN, self).__init__()
 
-        self.params_list = []
-
+        self.layers = torch.nn.ModuleList([])
         self.conv1 = GCNConv(edge_features, input_dim, hid_dim, update_edge=False)
-        self.params_list.append({'params': self.conv1.parameters(), 'weighted_decay': 0.})
+        self.layers.append(self.conv1)
         self.bn1 = torch.nn.BatchNorm1d(hid_dim)
-        self.params_list.append({'params': self.bn1.parameters(), 'weighted_decay': 0.})
+        self.layers.append(self.bn1)
 
         self.conv2 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=False)
-        self.params_list.append({'params': self.conv2.parameters(), 'weighted_decay': 0.})
+        self.layers.append(self.conv2)
         self.bn2 = torch.nn.BatchNorm1d(hid_dim)
-        self.params_list.append({'params': self.bn2.parameters(), 'weighted_decay': 0.})
+        self.layers.append(self.bn2)
 
         self.conv3 = GCNConv(edge_features, hid_dim, hid_dim, update_edge=True)
-        self.params_list.append({'params': self.conv3.parameters(), 'weighted_decay': 0.})
+        self.layers.append(self.conv3)
         self.bn3 = torch.nn.BatchNorm1d(hid_dim)
-        self.params_list.append({'params': self.bn3.parameters(), 'weighted_decay': 0.})
+        self.layers.append(self.bn3)
         self.bn_edge3 = torch.nn.BatchNorm1d(hid_dim)
-        self.params_list.append({'params': self.bn_edge3.parameters(), 'weighted_decay': 0.})
+        self.layers.append(self.bn_edge3)
 
         self.lin_node = torch.nn.Linear(hid_dim, emb_dim)
-        self.params_list.append({'params': self.lin_node.parameters()})
+        self.layers.append(self.lin_node)
         self.lin_edge = torch.nn.Linear(hid_dim, emb_dim)
-        self.params_list.append({'params': self.lin_edge.parameters()})
+        self.layers.append(self.lin_edge)
         self.normalize = normalize
         if normalize:
             self.node_bn = torch.nn.BatchNorm1d(emb_dim, affine=False)
+            self.layers.append(self.node_bn)
             self.edge_bn = torch.nn.BatchNorm1d(emb_dim, affine=False)
+            self.layers.append(self.edge_bn)
 
     def forward(self, data):
         x, edge_attr = data.x, data.edge_attr
@@ -86,3 +93,7 @@ class NetGCN(torch.nn.Module):
             edge_attr = self.edge_bn(edge_attr)
 
         return x, edge_attr
+
+    def reset_parameters(self):
+        for l in self.layers:
+            l.reset_parameters()

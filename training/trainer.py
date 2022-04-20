@@ -36,8 +36,6 @@ class Trainer:
                  task_type: str,
                  voting: int,
                  max_patience: int,
-                 optimizer: Tuple[Optimizer, Optional[Optimizer]],
-                 scheduler: Tuple[Scheduler, Optional[Scheduler]],
                  criterion: Loss,
                  device: Union[str, torch.device],
                  imle_configs: ConfigDict,
@@ -52,8 +50,6 @@ class Trainer:
         :param task_type:
         :param voting:
         :param max_patience:
-        :param optimizer:
-        :param scheduler:
         :param criterion:
         :param device:
         :param imle_configs:
@@ -67,8 +63,6 @@ class Trainer:
 
         self.task_type = task_type
         self.voting = voting
-        self.optimizer, self.optimizer_embd = optimizer
-        self.scheduler, self.scheduler_embd = scheduler
         self.criterion = criterion
         self.device = device
 
@@ -97,6 +91,12 @@ class Trainer:
                                              return_list=False,
                                              perturb=False,
                                              sample_rand=imle_configs.imle_sample_rand)
+
+    def clear_stats(self):
+        self.curves = defaultdict(list)
+        self.best_val_loss = 1e5
+        self.best_val_acc = 0.
+        self.patience = 0
 
     def get_aux_loss(self, logits: torch.Tensor):
         """
@@ -176,14 +176,16 @@ class Trainer:
     def train(self,
               dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
               emb_model: Emb_model,
-              model: Train_model):
+              model: Train_model,
+              optimizer_embd: Optional[Optimizer],
+              optimizer: Optimizer):
 
         if emb_model is not None:
             emb_model.train()
             self.imle_scheduler.return_list = False
             self.imle_scheduler.perturb = False
             self.imle_scheduler.sample_rand = self.imle_sample_rand
-            self.optimizer_embd.zero_grad()
+            optimizer_embd.zero_grad()
 
         model.train()
         train_losses = torch.tensor(0., device=self.device)
@@ -194,7 +196,7 @@ class Trainer:
 
         for batch_id, data in enumerate(dataloader):
             data = data.to(self.device)
-            self.optimizer.zero_grad()
+            optimizer.zero_grad()
 
             aux_loss = None
             if emb_model is not None:
@@ -206,12 +208,12 @@ class Trainer:
                 loss += aux_loss
 
             loss.backward()
-            self.optimizer.step()
-            if self.optimizer_embd is not None:
+            optimizer.step()
+            if optimizer_embd is not None:
                 if (batch_id % self.micro_batch_embd == self.micro_batch_embd - 1) or (batch_id >= len(dataloader) - 1):
                     emb_model = scale_grad(emb_model, (batch_id % self.micro_batch_embd) + 1)
-                    self.optimizer_embd.step()
-                    self.optimizer_embd.zero_grad()
+                    optimizer_embd.step()
+                    optimizer_embd.zero_grad()
 
             train_losses += loss * data.num_graphs
             num_graphs += data.num_graphs
@@ -225,7 +227,7 @@ class Trainer:
             train_acc = ((preds == labels).sum() / labels.numel()).item()
             self.curves['train_acc'].append(train_acc)
         else:
-            train_acc = None
+            train_acc = 0.
 
         train_loss = train_losses.item() / num_graphs
         self.curves['train_loss'].append(train_loss)
@@ -241,6 +243,8 @@ class Trainer:
                   dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
                   emb_model: Emb_model,
                   model: Train_model,
+                  scheduler_embd: Optional[Scheduler] = None,
+                  scheduler: Optional[Scheduler] = None,
                   test: bool = False):
         if emb_model is not None:
             emb_model.eval()
@@ -279,21 +283,21 @@ class Trainer:
                 self.curves['val_acc'].append(val_acc)
                 self.best_val_acc = max(self.best_val_acc, val_acc)
         else:
-            val_acc = None
+            val_acc = 0.
 
         val_loss = val_losses.item() / num_graphs
 
         early_stop = False
         if not test:
-            if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                self.scheduler.step(val_loss)
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(val_loss)
             else:
-                self.scheduler.step()
-            if self.scheduler_embd is not None:
-                if isinstance(self.scheduler_embd, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    self.scheduler_embd.step(val_loss)
+                scheduler.step()
+            if scheduler_embd is not None:
+                if isinstance(scheduler_embd, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    scheduler_embd.step(val_loss)
                 else:
-                    self.scheduler_embd.step()
+                    scheduler_embd.step()
 
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss

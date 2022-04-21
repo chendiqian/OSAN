@@ -1,0 +1,38 @@
+fixed:
+  model: gine
+  dataset: zinc
+  normalize_label: False
+  hid_size: 256
+  lr: 1.e-3
+  patience: 100
+  dropout: 0.
+  reg: 0.
+  num_convlayers: 4
+  gnn_jk: 'residual'
+  batch_size: 128
+  min_epochs: 700
+  max_epochs: 1000
+  data_path: './datasets'
+  log_path: './logs'
+  save_freq: 100
+  voting: 5
+  debug: False
+  num_runs: 5
+
+  sample_configs:
+    sample_policy: edge
+    sample_k: -1
+    num_subgraphs: 1
+    remove_node: False
+    add_full_graph: False
+    sample_with_esan: False
+
+  imle_configs:
+    embd_lr: 1.e-3
+    reg_embd: 0.
+    imle_sample_rand: False
+    micro_batch_embd: 1
+    norm_logits: False
+    noise_scale: 1.
+    beta: 10.
+    aux_loss_weight: 0.

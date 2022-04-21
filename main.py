@@ -169,11 +169,6 @@ def run(fixed):
             if val_acc is not None:
                 writer.add_scalar('acc/valacc', val_acc, epoch)
 
-            if epoch % args.save_freq == 0:
-                torch.save(model.state_dict(), f'{run_folder}/model{epoch}.pt')
-                if emb_model is not None:
-                    torch.save(emb_model.state_dict(), f'{run_folder}/embd_model{epoch}.pt')
-
             if trainer.patience == 0:
                 best_epoch = epoch
                 torch.save(model.state_dict(), f'{run_folder}/model_best.pt')

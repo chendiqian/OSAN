@@ -4,6 +4,7 @@ common:
   normalize_label: True
   hid_size: 64
   lr: 1.e-3
+  lr_steps: [ 400, 600 ]
   patience: 100
   reg: 0.
   num_convlayers: 6

@@ -31,18 +31,12 @@ class SubgraphSetBatch:
         return ' '.join(string)
 
 
-# SubgraphSetBatch = namedtuple(
-#     'SubgraphSetBatch', [
-#         'x',
-#         'edge_index',
-#         'edge_attr',
-#         'edge_weight',
-#         'y',
-#         'batch',
-#         'inter_graph_idx',
-#         'ptr',
-#         'num_graphs',
-#     ])
+AttributedDataLoader = namedtuple(
+    'AttributedDataLoader', [
+        'loader',
+        'mean',
+        'std'
+    ])
 
 
 class GraphToUndirected:

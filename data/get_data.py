@@ -3,11 +3,12 @@ from typing import Tuple, Union
 from argparse import Namespace
 from ml_collections import ConfigDict
 
+from torch import device as torchdevice
 from torch_geometric.datasets import TUDataset
 from torch_geometric.transforms import Compose
 
 from data.custom_dataloader import MYDataLoader
-from data.data_utils import GraphToUndirected
+from data.data_utils import GraphToUndirected, AttributedDataLoader
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler
 
@@ -22,10 +23,13 @@ NAME_DICT = {'zinc': "ZINC_full",
              'alchemy': "alchemy_full"}
 
 
-def get_data(args: Union[Namespace, ConfigDict]) -> Tuple[MYDataLoader, MYDataLoader, MYDataLoader]:
+def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[AttributedDataLoader,
+                                                                               AttributedDataLoader,
+                                                                               AttributedDataLoader]:
     """
 
     :param args
+    :param device
     :return:
     """
     if not os.path.isdir(args.data_path):
@@ -100,11 +104,6 @@ def get_data(args: Union[Namespace, ConfigDict]) -> Tuple[MYDataLoader, MYDataLo
                            transform=transform,
                            pre_transform=pre_transform)
 
-    if args.normalize_label:
-        mean = dataset.data.y.mean(dim=0, keepdim=True)
-        std = dataset.data.y.std(dim=0, keepdim=True)
-        dataset.data.y = (dataset.data.y - mean) / std
-
     # ==============================================================================
     # get split
     if args.dataset.lower() == 'zinc':
@@ -116,11 +115,33 @@ def get_data(args: Union[Namespace, ConfigDict]) -> Tuple[MYDataLoader, MYDataLo
         val_set = dataset[val_indices]
         test_set = dataset[test_indices]
 
-    train_loader = MYDataLoader(train_set, batch_size=args.batch_size, shuffle=not args.debug,
-                                subgraph_loader=sample_collator)
-    test_loader = MYDataLoader(test_set, batch_size=args.batch_size, shuffle=False,
-                               subgraph_loader=sample_collator)
-    val_loader = MYDataLoader(val_set, batch_size=args.batch_size, shuffle=False,
-                              subgraph_loader=sample_collator)
+    if args.normalize_label:
+        mean = dataset.data.y.mean(dim=0, keepdim=True).to(device)
+        std = dataset.data.y.std(dim=0, keepdim=True).to(device)
+        dataset.data.y = (dataset.data.y - mean) / std
+    else:
+        mean, std = None, None
+
+    train_loader = AttributedDataLoader(
+        loader=MYDataLoader(train_set,
+                            batch_size=args.batch_size,
+                            shuffle=not args.debug,
+                            subgraph_loader=sample_collator),
+        mean=mean,
+        std=std)
+    test_loader = AttributedDataLoader(
+        loader=MYDataLoader(test_set,
+                            batch_size=args.batch_size,
+                            shuffle=False,
+                            subgraph_loader=sample_collator),
+        mean=mean,
+        std=std)
+    val_loader = AttributedDataLoader(
+        loader=MYDataLoader(val_set,
+                            batch_size=args.batch_size,
+                            shuffle=False,
+                            subgraph_loader=sample_collator),
+        mean=mean,
+        std=std)
 
     return train_loader, val_loader, test_loader

@@ -74,15 +74,14 @@ def run(fixed):
 
     logger = get_logger(folder_name)
 
-    train_loader, val_loader, test_loader = get_data(args)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    train_loader, val_loader, test_loader = get_data(args, device)
 
     if args.dataset.lower() in ['zinc', 'alchemy']:
         task_type = 'regression'
         criterion = torch.nn.L1Loss()
     else:
         raise NotImplementedError
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if args.model.lower() == 'gine':
         model = NetGINE(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],

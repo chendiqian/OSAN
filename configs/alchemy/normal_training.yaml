@@ -1,0 +1,27 @@
+fixed:
+  model: gine_alchemy
+  dataset: alchemy
+  normalize_label: True
+  hid_size: 64
+  lr: 1.e-3
+  patience: 100
+  reg: 0.
+  num_convlayers: 6
+  batch_size: 64
+  min_epochs: 700
+  max_epochs: 1000
+  data_path: './datasets'
+  log_path: './logs'
+  voting: 1
+  debug: False
+  num_runs: 5
+
+  sample_configs:
+    sample_policy: null
+    sample_k: null
+    num_subgraphs: 0
+    remove_node: null
+    add_full_graph: null
+    sample_with_esan: False
+
+  imle_configs: null

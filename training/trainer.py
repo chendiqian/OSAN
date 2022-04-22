@@ -6,13 +6,10 @@ from typing import Union, Optional
 from ml_collections import ConfigDict
 
 import torch.linalg
-from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric.data import Batch, Data
-from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from data.custom_scheduler import BaseScheduler, StepScheduler
-from data.custom_dataloader import MYDataLoader
-from data.data_utils import scale_grad
+from data.data_utils import scale_grad, AttributedDataLoader
 from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
 from imle.wrapper import imle
@@ -174,7 +171,7 @@ class Trainer:
         return data, aux_loss
 
     def train(self,
-              dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
+              dataloader: AttributedDataLoader,
               emb_model: Emb_model,
               model: Train_model,
               optimizer_embd: Optional[Optimizer],
@@ -194,7 +191,7 @@ class Trainer:
             labels = []
         num_graphs = 0
 
-        for batch_id, data in enumerate(dataloader):
+        for batch_id, data in enumerate(dataloader.loader):
             data = data.to(self.device)
             optimizer.zero_grad()
 
@@ -240,7 +237,7 @@ class Trainer:
 
     @torch.no_grad()
     def inference(self,
-                  dataloader: Union[TorchDataLoader, PyGDataLoader, MYDataLoader],
+                  dataloader: AttributedDataLoader,
                   emb_model: Emb_model,
                   model: Train_model,
                   scheduler_embd: Optional[Scheduler] = None,
@@ -260,14 +257,17 @@ class Trainer:
         num_graphs = 0
 
         for v in range(self.voting):
-            for data in dataloader:
+            for data in dataloader.loader:
                 data = data.to(self.device)
 
                 if emb_model is not None:
                     data, _ = self.emb_model_forward(data, emb_model, train=False)
 
                 pred = model(data)
-                loss = self.criterion(pred, data.y.to(torch.float))
+                if dataloader.std is not None:
+                    loss = self.criterion(pred * dataloader.std, data.y * dataloader.std)
+                else:
+                    loss = self.criterion(pred, data.y.to(torch.float))
 
                 val_losses += loss * data.num_graphs
                 if self.task_type == 'classification':

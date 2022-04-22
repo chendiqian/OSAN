@@ -7,9 +7,10 @@ from .GINE_gnn import GINEConv
 class NetGINEAlchemy(torch.nn.Module):
     def __init__(self, input_dims, edge_features, dim, num_class, num_layers):
         super(NetGINEAlchemy, self).__init__()
+        assert num_layers >= 1
 
         self.conv = torch.nn.ModuleList([GINEConv(edge_features, input_dims, dim)])
-        for _ in range(num_layers):
+        for _ in range(num_layers - 1):
             self.conv.append(GINEConv(edge_features, dim, dim))
 
         self.set2set = Set2Set(1 * dim, processing_steps=6)
@@ -33,3 +34,10 @@ class NetGINEAlchemy(torch.nn.Module):
         if x.shape[-1] == 1:
             x = x.reshape(-1)
         return x
+
+    def reset_parameters(self):
+        for l in self.conv:
+            l.reset_parameters()
+        self.set2set.reset_parameters()
+        self.fc1.reset_parameters()
+        self.fc4.reset_parameters()

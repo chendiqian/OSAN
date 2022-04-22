@@ -60,7 +60,15 @@ def prepare_exp(folder_name: str) -> Tuple[SummaryWriter, str]:
 
 @ex.automain
 def run(fixed):
-    args = ConfigDict(fixed)
+    with open(f"./configs/{fixed['dataset'].lower()}/common_configs.yaml", 'r') as stream:
+        try:
+            common_configs = yaml.safe_load(stream)
+            common_configs = common_configs['common']
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    common_configs.update(fixed)
+    args = ConfigDict(common_configs)
     hparams = naming(args)
 
     if not os.path.isdir(args.log_path):
@@ -134,7 +142,7 @@ def run(fixed):
             scheduler_embd = None
         model.reset_parameters()
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.reg)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [4, 6], gamma=0.1 ** 0.5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, args.lr_steps, gamma=0.1 ** 0.5)
         writer, run_folder = prepare_exp(folder_name)
 
         best_epoch = 0
@@ -160,13 +168,15 @@ def run(fixed):
                         f'val loss: {val_loss}, '
                         f'patience: {trainer.patience}, '
                         f'training acc: {train_acc}, '
-                        f'val acc: {val_acc}')
+                        f'val acc: {val_acc}, '
+                        f'lr: {scheduler.optimizer.param_groups[0]["lr"]}')
             writer.add_scalar('loss/training loss', train_loss, epoch)
             writer.add_scalar('loss/val loss', val_loss, epoch)
             if train_acc is not None:
                 writer.add_scalar('acc/training acc', train_acc, epoch)
             if val_acc is not None:
                 writer.add_scalar('acc/valacc', val_acc, epoch)
+            writer.add_scalar('lr', scheduler.optimizer.param_groups[0]['lr'], epoch)
 
             if trainer.patience == 0:
                 best_epoch = epoch

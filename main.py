@@ -189,10 +189,8 @@ def run(fixed):
 
         model.load_state_dict(torch.load(f'{run_folder}/model_best.pt'))
         logger.info(f'loaded best model at epoch {best_epoch}')
-        model.eval()
         if emb_model is not None:
             emb_model.load_state_dict(torch.load(f'{run_folder}/embd_model_best.pt'))
-            emb_model.eval()
 
         test_loss, test_acc, _ = trainer.inference(test_loader, emb_model, model, test=True)
         logger.info(f'Best val loss: {trainer.best_val_loss}')
@@ -207,7 +205,6 @@ def run(fixed):
         best_val_accs.append(trainer.best_val_acc)
         test_accs.append(test_acc)
 
-        logging.shutdown()
         trainer.save_curve(run_folder)
         trainer.clear_stats()
 

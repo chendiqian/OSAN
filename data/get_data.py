@@ -116,9 +116,11 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[A
         test_set = dataset[test_indices]
 
     if args.normalize_label:
-        mean = dataset.data.y.mean(dim=0, keepdim=True).to(device)
-        std = dataset.data.y.std(dim=0, keepdim=True).to(device)
+        mean = dataset.data.y.mean(dim=0, keepdim=True)
+        std = dataset.data.y.std(dim=0, keepdim=True)
         dataset.data.y = (dataset.data.y - mean) / std
+        mean = mean.to(device)
+        std = std.to(device)
     else:
         mean, std = None, None
 

@@ -1,0 +1,14 @@
+fixed:
+  dataset: zinc
+  log_path: './logs'
+  voting: 5
+
+  sample_configs:
+    sample_policy: edge
+    sample_k: 20
+    num_subgraphs: 1
+    remove_node: False
+    add_full_graph: False
+    sample_with_esan: False
+
+  imle_configs: null

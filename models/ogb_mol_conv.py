@@ -50,7 +50,7 @@ class GINConv(MessagePassing):
         for l in lst:
             if not isinstance(l, torch.nn.ReLU):
                 l.reset_parameters()
-        self.eps = torch.nn.Parameter(torch.Tensor([0.])).to(self.eps.device)
+        self.eps = torch.nn.Parameter(torch.Tensor([0.]).to(self.eps.device))
         self.bond_encoder.reset_parameters()
 
 

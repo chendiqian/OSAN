@@ -59,9 +59,20 @@ class OGBGNN(torch.nn.Module):
         else:
             self.graph_pred_linear = torch.nn.Linear(self.emb_dim, self.num_tasks)
 
-    def forward(self, batched_data):
-        h_node = self.gnn_node(batched_data)
-        h_graph = self.pool(h_node, batched_data.batch)
+    def forward(self, data):
+        h_node = self.gnn_node(data)
+
+        if hasattr(data, 'selected_node_masks') and data.selected_node_masks is not None:
+            if data.selected_node_masks.dtype == torch.float:
+                h_node = h_node * data.selected_node_masks[:, None]
+            elif data.selected_node_masks.dtype == torch.bool:
+                h_node = h_node[data.selected_node_masks, :]
+            else:
+                raise ValueError
+
+        h_graph = self.pool(h_node, data.batch)
+        if hasattr(data, 'inter_graph_idx') and data.inter_graph_idx is not None:
+            h_graph = global_mean_pool(h_graph, data.inter_graph_idx)
         return self.graph_pred_linear(h_graph)
 
     def reset_parameters(self):

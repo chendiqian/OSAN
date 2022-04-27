@@ -27,13 +27,20 @@ class GINConv(MessagePassing):
 
         self.bond_encoder = BondEncoder(emb_dim=emb_dim)
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x, edge_index, edge_attr, edge_weight):
+        if edge_weight is not None and edge_weight.ndim < 2:
+            edge_weight = edge_weight[:, None]
+
         edge_embedding = self.bond_encoder(edge_attr)
-        out = self.mlp((1 + self.eps) * x + self.propagate(edge_index, x=x, edge_attr=edge_embedding))
+        out = self.mlp((1 + self.eps) * x + self.propagate(edge_index,
+                                                           x=x,
+                                                           edge_attr=edge_embedding,
+                                                           edge_weight=edge_weight))
         return out
 
-    def message(self, x_j, edge_attr):
-        return F.relu(x_j + edge_attr)
+    def message(self, x_j, edge_attr, edge_weight):
+        m = torch.relu(x_j + edge_attr)
+        return m * edge_weight if edge_weight is not None else m
 
     def update(self, aggr_out):
         return aggr_out
@@ -56,7 +63,10 @@ class GCNConv(MessagePassing):
         self.root_emb = torch.nn.Embedding(1, emb_dim)
         self.bond_encoder = BondEncoder(emb_dim=emb_dim)
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x, edge_index, edge_attr, edge_weight):
+        if edge_weight is not None and edge_weight.ndim < 2:
+            edge_weight = edge_weight[:, None]
+
         x = self.linear(x)
         edge_embedding = self.bond_encoder(edge_attr)
 
@@ -69,11 +79,12 @@ class GCNConv(MessagePassing):
 
         norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
 
-        return self.propagate(edge_index, x=x, edge_attr=edge_embedding, norm=norm) + F.relu(
+        return self.propagate(edge_index, x=x, edge_attr=edge_embedding, norm=norm, edge_weight=edge_weight) + F.relu(
             x + self.root_emb.weight) * 1. / deg.view(-1, 1)
 
-    def message(self, x_j, edge_attr, norm):
-        return norm.view(-1, 1) * F.relu(x_j + edge_attr)
+    def message(self, x_j, edge_attr, norm, edge_weight):
+        m = norm.view(-1, 1) * F.relu(x_j + edge_attr)
+        return m * edge_weight if edge_weight is not None else m
 
     def update(self, aggr_out):
         return aggr_out
@@ -123,13 +134,14 @@ class GNN_node(torch.nn.Module):
 
             self.batch_norms.append(torch.nn.BatchNorm1d(emb_dim))
 
-    def forward(self, batched_data):
-        x, edge_index, edge_attr, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch
+    def forward(self, data):
+        x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
+        edge_weight = data.edge_weight
 
         h_list = [self.atom_encoder(x)]
         for layer in range(self.num_layer):
 
-            h = self.convs[layer](h_list[layer], edge_index, edge_attr)
+            h = self.convs[layer](h_list[layer], edge_index, edge_attr, edge_weight)
             h = self.batch_norms[layer](h)
 
             if layer == self.num_layer - 1:
@@ -216,9 +228,12 @@ class GNN_node_Virtualnode(torch.nn.Module):
                                     torch.nn.Linear(2 * emb_dim, emb_dim), torch.nn.BatchNorm1d(emb_dim),
                                     torch.nn.ReLU()))
 
-    def forward(self, batched_data):
+    def forward(self, data):
 
-        x, edge_index, edge_attr, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch
+        if hasattr(data, 'inter_graph_idx') and data.inter_graph_idx is not None:
+            raise NotImplementedError("Not compatible with subgraph sampling!")
+
+        x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
 
         # virtual node embeddings for graphs
         virtualnode_embedding = self.virtualnode_embedding(

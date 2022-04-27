@@ -1,5 +1,5 @@
 common:
-  model: gin-virtual
+  model: ogb_gin
   dataset: ogbg-molesol
   dropout: 0.5
   hid_size: 300

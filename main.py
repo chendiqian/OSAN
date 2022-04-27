@@ -118,6 +118,13 @@ def run(fixed):
                        emb_dim=args.hid_size,
                        drop_ratio=args.dropout,
                        virtual_node=True).to(device)
+    elif args.model.lower() == 'ogb_gin':
+        model = OGBGNN(gnn_type='gin',
+                       num_tasks=num_tasks,
+                       num_layer=args.num_convlayers,
+                       emb_dim=args.hid_size,
+                       drop_ratio=args.dropout,
+                       virtual_node=False).to(device)
     else:
         raise NotImplementedError
 
@@ -126,7 +133,8 @@ def run(fixed):
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
                            args.sample_configs.num_subgraphs,
-                           args.imle_configs.norm_logits).to(device)
+                           normalize=args.imle_configs.norm_logits,
+                           encoder='ogb' in args.dataset.lower()).to(device)
     else:
         emb_model = None
 

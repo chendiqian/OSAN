@@ -9,6 +9,7 @@ install_requires = [
     'PyYAML',
     'tensorboard',
     'setuptools==59.5.0',
+    'ogb==1.3.3',
 
     'torch@https://download.pytorch.org/whl/cu102/torch-1.10.1%2Bcu102-cp38-cp38-linux_x86_64.whl',
     'torch-scatter@https://data.pyg.org/whl/torch-1.10.0%2Bcu102/torch_scatter-2.0.9-cp38-cp38-linux_x86_64.whl',

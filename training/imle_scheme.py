@@ -90,8 +90,12 @@ class IMLEScheme:
                 logit = logit.clone() + noise
 
             if self.imle_sample_policy == 'node':
-                k = self.sample_k + logit.shape[0] if self.sample_k < 0 else self.sample_k  # e.g. -1 -> remove 1 node
-                thresh = torch.topk(logit, k=min(k, logit.shape[0]), dim=0, sorted=True).values[-1, :]  # kth largest
+                if self.sample_k < 0:
+                    k = logit.shape[0] + self.sample_k
+                    k = max(k, 1)  # in case only 1 node
+                else:
+                    k = min(self.sample_k, logit.shape[0])
+                thresh = torch.topk(logit, k=k, dim=0, sorted=True).values[-1, :]  # kth largest
                 mask = (logit >= thresh[None]).to(torch.float)
             elif self.imle_sample_policy == 'edge':
                 mask = undirected_edge_sample(self.graphs[i].edge_index, logit, self.sample_k)

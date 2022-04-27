@@ -45,6 +45,7 @@ def undirected_edge_sample(edge_index: torch.Tensor, edge_weights: torch.Tensor,
     device = edge_index.device
     if k < 0:
         k += edge_weights.shape[0] // 2
+        k = max(k, 0)
 
     if k * 2 >= edge_index.shape[1]:
         return torch.ones_like(edge_weights, dtype=edge_weights.dtype, device=device)

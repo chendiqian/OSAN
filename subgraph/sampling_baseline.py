@@ -32,6 +32,7 @@ def node_rand_sampling(graph: Data,
 
     if node_per_subgraph < 0:  # drop nodes
         node_per_subgraph += n_nodes
+        node_per_subgraph = max(1, node_per_subgraph)
 
     graphs = [graph] if add_full_graph else []
     for i in range(n_subgraphs):
@@ -62,6 +63,7 @@ def edge_rand_sampling(graph: Data,
 
     if edge_per_subgraph < 0:  # drop edges
         edge_per_subgraph += n_edge
+        edge_per_subgraph = max(edge_per_subgraph, 0)
 
     graphs = [graph] if add_full_graph else []
     for i in range(n_subgraphs):

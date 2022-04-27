@@ -1,0 +1,14 @@
+fixed:
+  dataset: ogbg-molesol
+  log_path: './logs'
+  voting: 1
+
+  sample_configs:
+    sample_policy: null
+    sample_k: null
+    num_subgraphs: 0
+    remove_node: null
+    add_full_graph: null
+    sample_with_esan: False
+
+  imle_configs: null

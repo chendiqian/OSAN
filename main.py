@@ -11,11 +11,10 @@ from torch.utils.tensorboard import SummaryWriter
 from numpy import mean as np_mean
 from numpy import std as np_std
 
-from models import NetGINE, NetGCN, NetGINEAlchemy
+from models import NetGINE, NetGCN, NetGINEAlchemy, OGBGNN
 from training.trainer import Trainer
-from data.get_data import get_data
+from data.get_data import get_data, get_ogb_data
 from data.const import DATASET_FEATURE_STAT_DICT
-
 
 ex = Experiment()
 
@@ -83,11 +82,18 @@ def run(fixed):
     logger = get_logger(folder_name)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    train_loader, val_loader, test_loader = get_data(args, device)
+    if 'ogb' in args.dataset.lower():
+        train_loader, val_loader, test_loader, num_tasks = get_ogb_data(args)
+    else:
+        train_loader, val_loader, test_loader = get_data(args, device)
+        num_tasks = None
 
     if args.dataset.lower() in ['zinc', 'alchemy']:
         task_type = 'regression'
         criterion = torch.nn.L1Loss()
+    elif args.dataset.lower() in ['ogbg-molesol']:
+        task_type = 'regression'
+        criterion = torch.nn.MSELoss()
     else:
         raise NotImplementedError
 
@@ -105,6 +111,13 @@ def run(fixed):
                                args.hid_size,
                                num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
                                num_layers=args.num_convlayers).to(device)
+    elif args.model.lower() == 'gin-virtual':
+        model = OGBGNN(gnn_type='gin',
+                       num_tasks=num_tasks,
+                       num_layer=args.num_convlayers,
+                       emb_dim=args.hid_size,
+                       drop_ratio=args.dropout,
+                       virtual_node=True).to(device)
     else:
         raise NotImplementedError
 

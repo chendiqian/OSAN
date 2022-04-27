@@ -6,6 +6,7 @@ from ml_collections import ConfigDict
 from torch import device as torchdevice
 from torch_geometric.datasets import TUDataset
 from torch_geometric.transforms import Compose
+from ogb.graphproppred import PygGraphPropPredDataset
 
 from data.custom_dataloader import MYDataLoader
 from data.data_utils import GraphToUndirected, AttributedDataLoader
@@ -147,3 +148,69 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[A
         std=std)
 
     return train_loader, val_loader, test_loader
+
+
+def get_ogb_data(args: Union[Namespace, ConfigDict]) -> Tuple[AttributedDataLoader,
+                                                              AttributedDataLoader,
+                                                              AttributedDataLoader,
+                                                              int]:
+
+    if args.imle_configs is None and args.sample_configs.sample_with_esan:
+        if args.sample_configs.sample_policy in ['node', 'edge']:
+            assert args.sample_configs.sample_k == -1, "ESAN supports remove one substance only"
+        pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.sample_configs.remove_node)
+    else:
+        pre_transform = lambda x: x  # no deck
+
+    transform = None
+    data_path = args.data_path
+    sample_collator = False
+
+    if args.imle_configs is None:
+        if args.sample_configs.sample_with_esan:
+            # sample_collator = True
+            # transform = DeckSampler(args.esan_configs, add_full_graph=args.add_full_graph)
+            # dataset_func = CustomTUDataset
+            # data_path += f'/deck/{args.esan_configs.esan_policy}'
+            raise NotImplementedError
+        else:
+            if args.sample_configs.num_subgraphs > 0:  # sample-on-the-fly
+                sample_collator = True
+                transform = TRANSFORM_DICT[args.sample_configs.sample_policy](args.sample_configs.num_subgraphs,
+                                                                              args.sample_configs.sample_k,
+                                                                              args.sample_configs.remove_node,
+                                                                              args.sample_configs.add_full_graph)
+
+    dataset = PygGraphPropPredDataset(name=args.dataset,
+                                      root=data_path,
+                                      transform=transform,
+                                      pre_transform=pre_transform)
+    split_idx = dataset.get_idx_split()
+
+    train_idx = split_idx["train"] if not args.debug else split_idx["train"][:16]
+    val_idx = split_idx["valid"] if not args.debug else split_idx["valid"][:16]
+    test_idx = split_idx["test"] if not args.debug else split_idx["test"][:16]
+
+    train_loader = AttributedDataLoader(
+        loader=MYDataLoader(dataset[train_idx],
+                            batch_size=args.batch_size,
+                            shuffle=not args.debug,
+                            subgraph_loader=sample_collator),
+        mean=None,
+        std=None)
+    test_loader = AttributedDataLoader(
+        loader=MYDataLoader(dataset[test_idx],
+                            batch_size=args.batch_size,
+                            shuffle=False,
+                            subgraph_loader=sample_collator),
+        mean=None,
+        std=None)
+    val_loader = AttributedDataLoader(
+        loader=MYDataLoader(dataset[val_idx],
+                            batch_size=args.batch_size,
+                            shuffle=False,
+                            subgraph_loader=sample_collator),
+        mean=None,
+        std=None)
+
+    return train_loader, val_loader, test_loader, dataset.num_tasks

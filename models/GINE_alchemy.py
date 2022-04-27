@@ -26,6 +26,14 @@ class NetGINEAlchemy(torch.nn.Module):
         for conv in self.conv:
             x = torch.relu(conv(x, edge_index, edge_attr, edge_weight))
 
+        if hasattr(data, 'selected_node_masks') and data.selected_node_masks is not None:
+            if data.selected_node_masks.dtype == torch.float:
+                x = x * data.selected_node_masks[:, None]
+            elif data.selected_node_masks.dtype == torch.bool:
+                x = x[data.selected_node_masks, :]
+            else:
+                raise ValueError
+
         x = self.set2set(x, batch)
         x = torch.relu(self.fc1(x))
         if hasattr(data, 'inter_graph_idx') and data.inter_graph_idx is not None:

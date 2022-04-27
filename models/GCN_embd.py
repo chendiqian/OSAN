@@ -2,6 +2,8 @@ import torch
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import degree
 
+from .encoder import AtomEncoder, BondEncoder
+
 
 class GCNConv(MessagePassing):
     def __init__(self, edge_features, node_features, emb_dim, update_edge=False):
@@ -46,8 +48,15 @@ class GCNConv(MessagePassing):
 
 
 class NetGCN(torch.nn.Module):
-    def __init__(self, input_dim, edge_features, hid_dim, emb_dim, normalize=False):
+    def __init__(self, input_dim, edge_features, hid_dim, emb_dim, normalize=False, encoder=False):
         super(NetGCN, self).__init__()
+
+        self.encoder = encoder
+        if encoder:
+            self.atom_encoder = AtomEncoder(hid_dim)
+            self.bond_encoder = BondEncoder(hid_dim)
+            input_dim = hid_dim
+            edge_features = hid_dim
 
         self.layers = torch.nn.ModuleList([])
         self.conv1 = GCNConv(edge_features, input_dim, hid_dim, update_edge=False)
@@ -81,6 +90,10 @@ class NetGCN(torch.nn.Module):
     def forward(self, data):
         x, edge_attr = data.x, data.edge_attr
 
+        if self.encoder:
+            x = self.atom_encoder(x)
+            edge_attr = self.bond_encoder(edge_attr)
+
         x, _ = self.conv1(x, data.edge_index, edge_attr)
         x = self.bn1(torch.relu(x))
         x, _ = self.conv2(x, data.edge_index, edge_attr)
@@ -97,3 +110,6 @@ class NetGCN(torch.nn.Module):
     def reset_parameters(self):
         for l in self.layers:
             l.reset_parameters()
+        if self.encoder:
+            self.atom_encoder.reset_parameters()
+            self.bond_encoder.reset_parameters()

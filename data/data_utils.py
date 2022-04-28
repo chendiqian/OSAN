@@ -1,5 +1,5 @@
 from collections import namedtuple, deque
-from typing import List, Union
+from typing import List, Union, Tuple
 
 import numba
 import numpy as np
@@ -149,3 +149,11 @@ def scale_grad(model: torch.nn.Module, scalar: Union[int, float]) -> torch.nn.Mo
             p.grad /= scalar
 
     return model
+
+
+def pair_wise_idx(n_subg: int, device: TorchDevice) -> Tuple[Tensor, Tensor]:
+    senders = torch.arange(n_subg, device=device).repeat(n_subg - 1)
+    receivers = torch.arange(n_subg, device=device)[None].repeat(n_subg - 1, 1)
+    receivers = (receivers + torch.arange(n_subg - 1, device=device)[:, None] + 1) % n_subg
+    receivers = receivers.reshape(-1)
+    return senders, receivers

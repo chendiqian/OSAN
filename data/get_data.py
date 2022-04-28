@@ -9,7 +9,7 @@ from torch_geometric.transforms import Compose
 from ogb.graphproppred import PygGraphPropPredDataset
 
 from data.custom_dataloader import MYDataLoader
-from data.data_utils import GraphToUndirected, AttributedDataLoader
+from data.data_utils import GraphToUndirected, GraphCoalesce, AttributedDataLoader
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler
 
@@ -161,6 +161,8 @@ def get_ogb_data(args: Union[Namespace, ConfigDict]) -> Tuple[AttributedDataLoad
         pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.sample_configs.remove_node)
     else:
         pre_transform = lambda x: x  # no deck
+
+    pre_transform = Compose([GraphCoalesce(), pre_transform])
 
     transform = None
     data_path = args.data_path

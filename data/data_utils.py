@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 from torch import device as TorchDevice
 from torch_geometric.data import Data
-from torch_geometric.utils import to_undirected
+from torch_geometric.utils import to_undirected, coalesce
 
 
 class SubgraphSetBatch:
@@ -51,6 +51,21 @@ class GraphToUndirected:
         else:
             edge_index = to_undirected(graph.edge_index, graph.edge_attr, graph.num_nodes)
             edge_attr = None
+        return Data(x=graph.x,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    y=graph.y,
+                    num_nodes=graph.num_nodes)
+
+
+class GraphCoalesce:
+
+    def __call__(self, graph: Data):
+        if graph.edge_attr is None:
+            edge_index = coalesce(graph.edge_index, None, num_nodes=graph.num_nodes)
+            edge_attr = None
+        else:
+            edge_index, edge_attr = coalesce(graph.edge_index, graph.edge_attr, graph.num_nodes)
         return Data(x=graph.x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,

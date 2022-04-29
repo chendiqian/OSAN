@@ -276,7 +276,7 @@ class Trainer:
 
         preds = torch.cat(preds, dim=0)
         labels = torch.cat(labels, dim=0)
-        val_loss = self.criterion(preds, labels)
+        val_loss = self.criterion(preds, labels).item()
         if self.task_type == 'rocauc':
             val_metric = eval_rocauc(labels, preds)
             if not test:

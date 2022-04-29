@@ -1,8 +1,10 @@
 # credits to OGB team
 # https://github.com/snap-stanford/ogb/blob/master/examples/graphproppred/mol/gnn.py
+import pdb
 
 import torch
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool, GlobalAttention, Set2Set
+from torch_scatter import scatter
 
 from .ogb_mol_conv import GNN_node, GNN_node_Virtualnode
 
@@ -70,7 +72,12 @@ class OGBGNN(torch.nn.Module):
             else:
                 raise ValueError
 
-        h_graph = self.pool(h_node, data.batch)
+            num_nodes = scatter(data.selected_node_masks.detach(), data.batch, dim=0, reduce="sum")
+            h_graph = global_add_pool(h_node, data.batch)
+            h_graph = h_graph / num_nodes[:, None]
+        else:
+            h_graph = self.pool(h_node, data.batch)
+
         if hasattr(data, 'inter_graph_idx') and data.inter_graph_idx is not None:
             h_graph = global_mean_pool(h_graph, data.inter_graph_idx)
         return self.graph_pred_linear(h_graph)

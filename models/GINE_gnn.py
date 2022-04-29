@@ -2,7 +2,8 @@ import pdb
 
 import torch
 from torch.nn import Linear, ReLU
-from torch_geometric.nn import global_mean_pool, MessagePassing
+from torch_geometric.nn import global_mean_pool, MessagePassing, global_add_pool
+from torch_scatter import scatter
 
 from .nn_utils import residual
 
@@ -103,7 +104,11 @@ class NetGINE(torch.nn.Module):
             else:
                 raise ValueError
 
-        x = global_mean_pool(x, batch)
+            num_nodes = scatter(data.selected_node_masks.detach(), batch, dim=0, reduce="sum")
+            x = global_add_pool(x, batch)
+            x = x / num_nodes[:, None]
+        else:
+            x = global_mean_pool(x, batch)
 
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))

@@ -172,16 +172,16 @@ def run(fixed):
         best_epoch = 0
         for epoch in range(args.max_epochs):
             train_loss, train_metric = trainer.train(train_loader,
-                                                  emb_model,
-                                                  model,
-                                                  optimizer_embd,
-                                                  optimizer)
+                                                     emb_model,
+                                                     model,
+                                                     optimizer_embd,
+                                                     optimizer)
             val_loss, val_metric, early_stop = trainer.inference(val_loader,
-                                                              emb_model,
-                                                              model,
-                                                              scheduler_embd,
-                                                              scheduler,
-                                                              test=False)
+                                                                 emb_model,
+                                                                 model,
+                                                                 scheduler_embd,
+                                                                 scheduler,
+                                                                 test=False)
 
             if epoch > args.min_epochs and early_stop:
                 logger.info('early stopping')

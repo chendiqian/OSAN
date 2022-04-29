@@ -93,7 +93,7 @@ class Trainer:
     def clear_stats(self):
         self.curves = defaultdict(list)
         self.best_val_loss = 1e5
-        self.best_val_acc = 0.
+        self.best_val_metric = 0.
         self.patience = 0
 
     def get_aux_loss(self, logits: torch.Tensor):

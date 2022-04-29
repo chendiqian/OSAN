@@ -94,6 +94,9 @@ def run(fixed):
     elif args.dataset.lower() in ['ogbg-molesol']:
         task_type = 'regression'
         criterion = torch.nn.MSELoss()
+    elif args.dataset.lower() in ['ogbg-molbace']:
+        task_type = 'rocauc'
+        criterion = torch.nn.BCEWithLogitsLoss()
     else:
         raise NotImplementedError
 
@@ -148,8 +151,8 @@ def run(fixed):
 
     best_val_losses = []
     test_losses = []
-    best_val_accs = []
-    test_accs = []
+    best_val_metrics = []
+    test_metrics = []
 
     for _run in range(args.num_runs):
         if emb_model is not None:
@@ -168,12 +171,12 @@ def run(fixed):
 
         best_epoch = 0
         for epoch in range(args.max_epochs):
-            train_loss, train_acc = trainer.train(train_loader,
+            train_loss, train_metric = trainer.train(train_loader,
                                                   emb_model,
                                                   model,
                                                   optimizer_embd,
                                                   optimizer)
-            val_loss, val_acc, early_stop = trainer.inference(val_loader,
+            val_loss, val_metric, early_stop = trainer.inference(val_loader,
                                                               emb_model,
                                                               model,
                                                               scheduler_embd,
@@ -188,15 +191,13 @@ def run(fixed):
                         f'training loss: {train_loss}, '
                         f'val loss: {val_loss}, '
                         f'patience: {trainer.patience}, '
-                        f'training acc: {train_acc}, '
-                        f'val acc: {val_acc}, '
+                        f'training metric: {train_metric}, '
+                        f'val metric: {val_metric}, '
                         f'lr: {scheduler.optimizer.param_groups[0]["lr"]}')
             writer.add_scalar('loss/training loss', train_loss, epoch)
             writer.add_scalar('loss/val loss', val_loss, epoch)
-            if train_acc is not None:
-                writer.add_scalar('acc/training acc', train_acc, epoch)
-            if val_acc is not None:
-                writer.add_scalar('acc/valacc', val_acc, epoch)
+            writer.add_scalar('metric/training metric', train_metric, epoch)
+            writer.add_scalar('metric/val metric', val_metric, epoch)
             writer.add_scalar('lr', scheduler.optimizer.param_groups[0]['lr'], epoch)
 
             if trainer.patience == 0:
@@ -213,30 +214,30 @@ def run(fixed):
         if emb_model is not None:
             emb_model.load_state_dict(torch.load(f'{run_folder}/embd_model_best.pt'))
 
-        test_loss, test_acc, _ = trainer.inference(test_loader, emb_model, model, test=True)
+        test_loss, test_metric, _ = trainer.inference(test_loader, emb_model, model, test=True)
         logger.info(f'Best val loss: {trainer.best_val_loss}')
-        logger.info(f'Best val acc: {trainer.best_val_acc}')
+        logger.info(f'Best val metric: {trainer.best_val_metric}')
         logger.info(f'test loss: {test_loss}')
-        logger.info(f'test acc: {test_acc}')
+        logger.info(f'test metric: {test_metric}')
         logger.info(f'max_memory_allocated: {torch.cuda.max_memory_allocated()}')
         logger.info(f'memory_allocated: {torch.cuda.memory_allocated()}')
 
         best_val_losses.append(trainer.best_val_loss)
         test_losses.append(test_loss)
-        best_val_accs.append(trainer.best_val_acc)
-        test_accs.append(test_acc)
+        best_val_metrics.append(trainer.best_val_metric)
+        test_metrics.append(test_metric)
 
         trainer.save_curve(run_folder)
         trainer.clear_stats()
 
     results = {'best_val_losses': best_val_losses,
                'test_losses': test_losses,
-               'best_val_accs': best_val_accs,
-               'test_accs': test_accs,
+               'best_val_metrics': best_val_metrics,
+               'test_metrics': test_metrics,
                'val_loss_stats': f'mean: {np_mean(best_val_losses)}, std: {np_std(best_val_losses)}',
                'test_loss_stats': f'mean: {np_mean(test_losses)}, std: {np_std(test_losses)}',
-               'val_acc_stats': f'mean: {np_mean(best_val_accs)}, std: {np_std(best_val_accs)}',
-               'test_acc_stats': f'mean: {np_mean(test_accs)}, std: {np_std(test_accs)}'}
+               'val_metrics_stats': f'mean: {np_mean(best_val_metrics)}, std: {np_std(best_val_metrics)}',
+               'test_metrics_stats': f'mean: {np_mean(test_metrics)}, std: {np_std(test_metrics)}'}
 
     with open(os.path.join(folder_name, 'results.txt'), 'wt') as f:
         f.write(str(results))

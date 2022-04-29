@@ -10,6 +10,7 @@ from torch_geometric.data import Batch, Data
 
 from data.custom_scheduler import BaseScheduler, StepScheduler
 from data.data_utils import scale_grad, AttributedDataLoader
+from data.metrics import eval_rocauc
 from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
 from imle.wrapper import imle
@@ -64,7 +65,7 @@ class Trainer:
         self.device = device
 
         self.best_val_loss = 1e5
-        self.best_val_acc = 0.
+        self.best_val_metric = 0.
         self.patience = 0
         self.max_patience = max_patience
 
@@ -186,9 +187,11 @@ class Trainer:
 
         model.train()
         train_losses = torch.tensor(0., device=self.device)
-        if self.task_type == 'classification':
+        if self.task_type != 'regression':
             preds = []
             labels = []
+        else:
+            preds, labels = None, None
         num_graphs = 0
 
         for batch_id, data in enumerate(dataloader.loader):
@@ -214,17 +217,20 @@ class Trainer:
 
             train_losses += loss * data.num_graphs
             num_graphs += data.num_graphs
-            if self.task_type == 'classification':
+            if isinstance(preds, list):
                 preds.append(pred)
                 labels.append(data.y)
 
-        if self.task_type == 'classification':
-            preds = torch.cat(preds, dim=0) > 0.
+        if isinstance(preds, list):
+            preds = torch.cat(preds, dim=0)
             labels = torch.cat(labels, dim=0)
-            train_acc = ((preds == labels).sum() / labels.numel()).item()
-            self.curves['train_acc'].append(train_acc)
+            if self.task_type == 'rocauc':
+                train_metric = eval_rocauc(labels, preds)
+            else:
+                raise NotImplementedError
+            self.curves['train_metric'].append(train_metric)
         else:
-            train_acc = 0.
+            train_metric = 0.
 
         train_loss = train_losses.item() / num_graphs
         self.curves['train_loss'].append(train_loss)
@@ -233,7 +239,7 @@ class Trainer:
             del self.imle_scheduler.graphs
             del self.imle_scheduler.ptr
 
-        return train_loss, train_acc
+        return train_loss, train_metric
 
     @torch.no_grad()
     def inference(self,
@@ -250,11 +256,8 @@ class Trainer:
             self.imle_scheduler.sample_rand = False  # test time, always take topk, inspite of noise perturbation
 
         model.eval()
-        val_losses = torch.tensor(0., device=self.device)
-        if self.task_type == 'classification':
-            preds = []
-            labels = []
-        num_graphs = 0
+        preds = []
+        labels = []
 
         for v in range(self.voting):
             for data in dataloader.loader:
@@ -265,27 +268,24 @@ class Trainer:
 
                 pred = model(data)
                 if dataloader.std is not None:
-                    loss = self.criterion(pred * dataloader.std, data.y * dataloader.std)
+                    preds.append(pred * dataloader.std)
+                    labels.append(data.y.to(torch.float) * dataloader.std)
                 else:
-                    loss = self.criterion(pred, data.y.to(torch.float))
-
-                val_losses += loss * data.num_graphs
-                if self.task_type == 'classification':
                     preds.append(pred)
-                    labels.append(data.y)
-                num_graphs += data.num_graphs
+                    labels.append(data.y.to(torch.float))
 
-        if self.task_type == 'classification':
-            preds = torch.cat(preds, dim=0) > 0.
-            labels = torch.cat(labels, dim=0)
-            val_acc = ((preds == labels).sum() / labels.numel()).item()
+        preds = torch.cat(preds, dim=0)
+        labels = torch.cat(labels, dim=0)
+        val_loss = self.criterion(preds, labels)
+        if self.task_type == 'rocauc':
+            val_metric = eval_rocauc(labels, preds)
             if not test:
-                self.curves['val_acc'].append(val_acc)
-                self.best_val_acc = max(self.best_val_acc, val_acc)
+                self.curves['val_metric'].append(val_metric)
+                self.best_val_metric = max(self.best_val_metric, val_metric)
+        elif self.task_type == 'regression':
+            val_metric = 0.
         else:
-            val_acc = 0.
-
-        val_loss = val_losses.item() / num_graphs
+            raise NotImplementedError
 
         early_stop = False
         if not test:
@@ -313,7 +313,7 @@ class Trainer:
             del self.imle_scheduler.graphs
             del self.imle_scheduler.ptr
 
-        return val_loss, val_acc, early_stop
+        return val_loss, val_metric, early_stop
 
     def save_curve(self, path):
         pickle.dump(self.curves, open(os.path.join(path, 'curves.pkl'), "wb"))

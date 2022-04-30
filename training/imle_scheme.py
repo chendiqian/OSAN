@@ -7,6 +7,7 @@ from subgraph.greedy_expanding_tree import greedy_expand_tree
 from subgraph.mst_subgraph import mst_subgraph_sampling
 from subgraph.or_optimal_subgraph import get_or_suboptim_subgraphs, get_or_optim_subgraphs
 from subgraph.undirected_edge_selection import undirected_edge_sample
+from subgraph.node_sample_heuristic import sample_heuristic
 
 
 def get_split_idx(inc_tensor: torch.Tensor) -> Tuple:
@@ -97,6 +98,8 @@ class IMLEScheme:
                     k = min(self.sample_k, logit.shape[0])
                 thresh = torch.topk(logit, k=k, dim=0, sorted=True).values[-1, :]  # kth largest
                 mask = (logit >= thresh[None]).to(torch.float)
+            elif self.imle_sample_policy == 'node_heuristic':
+                mask = sample_heuristic(logit, self.sample_k)
             elif self.imle_sample_policy == 'edge':
                 mask = undirected_edge_sample(self.graphs[i].edge_index, logit, self.sample_k)
             elif self.imle_sample_policy == 'khop_subgraph':

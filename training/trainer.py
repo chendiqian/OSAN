@@ -204,6 +204,7 @@ class Trainer:
 
             pred = model(data)
             loss = self.criterion(pred, data.y.to(torch.float))
+            train_losses += loss.detach() * data.num_graphs  # aux loss not taken into account
             if aux_loss is not None:
                 loss += aux_loss
 
@@ -215,7 +216,6 @@ class Trainer:
                     optimizer_embd.step()
                     optimizer_embd.zero_grad()
 
-            train_losses += loss * data.num_graphs
             num_graphs += data.num_graphs
             if isinstance(preds, list):
                 preds.append(pred)

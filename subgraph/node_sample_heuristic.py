@@ -3,7 +3,7 @@ import numba
 import numpy as np
 
 
-# @numba.njit(cache=True)
+@numba.njit(cache=True)
 def numba_sample_node(weight: np.ndarray, k: int):
     mask = np.zeros(weight.shape, dtype=np.bool_)
     close_set = {-1}

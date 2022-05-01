@@ -8,7 +8,7 @@ fixed:
     sample_k: 5
     num_subgraphs: 20
     remove_node: True
-    add_full_graph: False
+    add_full_graph: True
     sample_with_esan: False
 
   imle_configs: null

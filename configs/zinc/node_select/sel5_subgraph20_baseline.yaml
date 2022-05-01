@@ -6,7 +6,7 @@ fixed:
   sample_configs:
     sample_policy: node
     sample_k: 5
-    num_subgraphs: 10
+    num_subgraphs: 20
     remove_node: True
     add_full_graph: False
     sample_with_esan: False

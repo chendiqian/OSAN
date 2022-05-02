@@ -138,7 +138,7 @@ def run(fixed):
                            DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                            args.hid_size,
                            args.num_convlayers,
-                           DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
+                           DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
     else:
         raise NotImplementedError
 

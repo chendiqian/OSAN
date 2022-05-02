@@ -13,7 +13,7 @@ from numpy import std as np_std
 
 from models import NetGINE, NetGCN, NetGINEAlchemy, OGBGNN
 from training.trainer import Trainer
-from data.get_data import get_data, get_ogb_data
+from data.get_data import get_data, get_ogb_data, get_qm9
 from data.const import DATASET_FEATURE_STAT_DICT
 
 ex = Experiment()
@@ -82,11 +82,13 @@ def run(fixed):
     logger = get_logger(folder_name)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    num_tasks = None
     if 'ogb' in args.dataset.lower():
         train_loader, val_loader, test_loader, num_tasks = get_ogb_data(args)
+    elif args.dataset == 'QM9':
+        train_loader, val_loader, test_loader = get_qm9(args, device)
     else:
         train_loader, val_loader, test_loader = get_data(args, device)
-        num_tasks = None
 
     if args.dataset.lower() in ['zinc', 'alchemy']:
         task_type = 'regression'
@@ -97,6 +99,9 @@ def run(fixed):
     elif args.dataset.lower() in ['ogbg-molbace']:
         task_type = 'rocauc'
         criterion = torch.nn.BCEWithLogitsLoss()
+    elif args.dataset == 'QM9':
+        task_type = 'regression'
+        criterion = torch.nn.L1Loss()
     else:
         raise NotImplementedError
 

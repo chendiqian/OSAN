@@ -1,5 +1,5 @@
 fixed:
-  dataset: QM9
+  dataset: qm9
   log_path: './logs'
   voting: 1
 

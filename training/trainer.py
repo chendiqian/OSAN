@@ -258,7 +258,7 @@ class Trainer:
         if emb_model is not None:
             emb_model.eval()
             self.imle_scheduler.return_list = True
-            self.imle_scheduler.perturb = True
+            self.imle_scheduler.perturb = self.voting > 1   # only perturb when voting more than once
             self.imle_scheduler.sample_rand = False  # test time, always take topk, inspite of noise perturbation
 
         model.eval()

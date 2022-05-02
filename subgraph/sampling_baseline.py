@@ -34,7 +34,13 @@ def node_rand_sampling(graph: Data,
         node_per_subgraph += n_nodes
         node_per_subgraph = max(1, node_per_subgraph)
 
-    graphs = [graph] if add_full_graph else []
+    # TODO: may need to clone the graph if some properties are important
+
+    graphs = [Data(x=graph.x,
+                   edge_index=graph.edge_index,
+                   edge_attr=graph.edge_attr,
+                   num_nodes=graph.num_nodes,
+                   y=graph.y)] if add_full_graph else []
     for i in range(n_subgraphs):
         indices = torch.randperm(n_nodes)[:node_per_subgraph]
         sort_indices = torch.sort(indices).values
@@ -65,7 +71,11 @@ def edge_rand_sampling(graph: Data,
         edge_per_subgraph += n_edge
         edge_per_subgraph = max(edge_per_subgraph, 0)
 
-    graphs = [graph] if add_full_graph else []
+    graphs = [Data(x=graph.x,
+                   edge_index=graph.edge_index,
+                   edge_attr=graph.edge_attr,
+                   num_nodes=graph.num_nodes,
+                   y=graph.y)] if add_full_graph else []
     for i in range(n_subgraphs):
         indices = torch.randperm(n_edge)[:edge_per_subgraph]
         sort_indices = torch.sort(indices).values
@@ -132,7 +142,11 @@ def khop_subgraph_sampling(data: Data,
     :return:
     """
     sample_indices = random.choices(range(data.num_nodes), k=n_subgraphs)
-    graphs = [data] if add_full_graph else []
+    graphs = [Data(x=data.x,
+                   edge_index=data.edge_index,
+                   edge_attr=data.edge_attr,
+                   num_nodes=data.num_nodes,
+                   y=data.y)] if add_full_graph else []
 
     np_edge_index = data.edge_index.cpu().numpy()
     for idx in sample_indices:
@@ -162,7 +176,11 @@ def max_spanning_tree_subgraph(data: Data, n_subgraphs: int, add_full_graph: boo
     :param add_full_graph:
     :return:
     """
-    graphs = [data] if add_full_graph else []
+    graphs = [Data(x=data.x,
+                   edge_index=data.edge_index,
+                   edge_attr=data.edge_attr,
+                   num_nodes=data.num_nodes,
+                   y=data.y)] if add_full_graph else []
     np_edge_index = data.edge_index.cpu().numpy().T
     for i in range(n_subgraphs):
         edge_mask = kruskal_max_span_tree(np_edge_index, None, data.num_nodes)
@@ -192,7 +210,11 @@ def greedy_expand_sampling(graph: Data,
         return [graph] * n_subgraphs
 
     edge_index = graph.edge_index.cpu().numpy()
-    graphs = [graph] if add_full_graph else []
+    graphs = [Data(x=graph.x,
+                   edge_index=graph.edge_index,
+                   edge_attr=graph.edge_attr,
+                   num_nodes=graph.num_nodes,
+                   y=graph.y)] if add_full_graph else []
     for _ in range(n_subgraphs):
         node_mask = numba_greedy_expand_tree(edge_index, node_per_subgraph, None, graph.num_nodes, repeat=1)
         graphs.append(nodesubset_to_subgraph(graph, torch.from_numpy(node_mask), relabel=relabel))

@@ -9,7 +9,7 @@ common:
   num_convlayers: 6
   batch_size: 64
   min_epochs: 700
-  max_epochs: 1000
+  max_epochs: 15
   data_path: './datasets'
-  debug: False
+  debug: True
   num_runs: 5

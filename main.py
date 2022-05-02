@@ -85,7 +85,7 @@ def run(fixed):
     num_tasks = None
     if 'ogb' in args.dataset.lower():
         train_loader, val_loader, test_loader, num_tasks = get_ogb_data(args)
-    elif args.dataset == 'QM9':
+    elif args.dataset == 'qm9':
         train_loader, val_loader, test_loader = get_qm9(args, device)
     else:
         train_loader, val_loader, test_loader = get_data(args, device)
@@ -99,7 +99,7 @@ def run(fixed):
     elif args.dataset.lower() in ['ogbg-molbace']:
         task_type = 'rocauc'
         criterion = torch.nn.BCEWithLogitsLoss()
-    elif args.dataset == 'QM9':
+    elif args.dataset.lower() == 'qm9':
         task_type = 'regression'
         criterion = torch.nn.L1Loss()
     else:

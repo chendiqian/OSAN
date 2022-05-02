@@ -247,7 +247,7 @@ def get_qm9(args, device):
     # ==============================================================================
     # get transform: ESAN -> sample from deck; IMLE or normal -> None; On the fly -> customed function
     transform = None
-    data_path = args.data_path
+    data_path = os.path.join(args.data_path, 'QM9')
     sample_collator = False
 
     if args.imle_configs is None:

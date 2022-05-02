@@ -1,0 +1,15 @@
+common:
+  model: gine_qm9
+  normalize_label: True
+  hid_size: 64
+  lr: 1.e-3
+  lr_steps: [ 400, 600 ]
+  patience: 100
+  reg: 0.
+  num_convlayers: 6
+  batch_size: 64
+  min_epochs: 700
+  max_epochs: 1000
+  data_path: './datasets'
+  debug: False
+  num_runs: 5

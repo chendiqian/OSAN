@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from numpy import mean as np_mean
 from numpy import std as np_std
 
-from models import NetGINE, NetGCN, NetGINEAlchemy, OGBGNN
+from models import NetGINE, NetGCN, NetGINEAlchemy, OGBGNN, NetGINE_QM
 from training.trainer import Trainer
 from data.get_data import get_data, get_ogb_data, get_qm9
 from data.const import DATASET_FEATURE_STAT_DICT
@@ -133,6 +133,12 @@ def run(fixed):
                        emb_dim=args.hid_size,
                        drop_ratio=args.dropout,
                        virtual_node=False).to(device)
+    elif args.model.lower() == 'gine_qm9':
+        model = NetGINE_QM(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                           DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                           args.hid_size,
+                           args.num_convlayers,
+                           DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
     else:
         raise NotImplementedError
 

@@ -6,7 +6,7 @@ from ml_collections import ConfigDict
 import numpy as np
 from torch import device as torchdevice
 from torch_geometric.datasets import TUDataset, QM9
-from torch_geometric.transforms import Compose
+from torch_geometric.transforms import Compose, Distance
 from ogb.graphproppred import PygGraphPropPredDataset
 
 from data.custom_dataloader import MYDataLoader
@@ -228,6 +228,11 @@ def get_qm9(args, device):
     val_indices = idx[10000:11000]
     test_indices = idx[11000:12000]
 
+    if args.debug:
+        train_indices = train_indices[:16]
+        val_indices = val_indices[:16]
+        test_indices = test_indices[:16]
+
     # =============================================================================
     # get pre_transform: to_directed + create ESAN deck
     if args.imle_configs is None and args.sample_configs.sample_with_esan:
@@ -236,6 +241,8 @@ def get_qm9(args, device):
         pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.sample_configs.remove_node)
     else:
         pre_transform = lambda x: x  # no deck
+
+    pre_transform = Compose([Distance(norm=False), pre_transform])
 
     # ==============================================================================
     # get transform: ESAN -> sample from deck; IMLE or normal -> None; On the fly -> customed function

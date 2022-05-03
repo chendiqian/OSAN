@@ -18,7 +18,8 @@ class GCNConv(MessagePassing):
 
     def forward(self, x, edge_index, edge_embedding):
         x = self.linear(x)
-        edge_embedding = self.edge_encoder(edge_embedding)
+        if edge_embedding is not None:
+            edge_embedding = self.edge_encoder(edge_embedding)
 
         row, col = edge_index
 
@@ -30,12 +31,16 @@ class GCNConv(MessagePassing):
         norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
 
         new_x = self.propagate(edge_index, x=x, edge_attr=edge_embedding, norm=norm)
-        new_edge_attr = self.edge_updating(new_x[edge_index[0]] + new_x[edge_index[1]]) + edge_embedding \
-            if self.update_edge else None
+        if self.update_edge:
+            new_edge_attr = self.edge_updating(new_x[edge_index[0]] + new_x[edge_index[1]])
+            if edge_embedding is not None:
+                new_edge_attr += edge_embedding
+        else:
+            new_edge_attr = None
         return new_x, new_edge_attr
 
     def message(self, x_j, edge_attr, norm):
-        return norm.view(-1, 1) * torch.relu(x_j + edge_attr)
+        return norm.view(-1, 1) * torch.relu(x_j + edge_attr) if edge_attr is not None else norm.view(-1, 1) * x_j
 
     def update(self, aggr_out):
         return aggr_out
@@ -92,7 +97,8 @@ class NetGCN(torch.nn.Module):
 
         if self.encoder:
             x = self.atom_encoder(x)
-            edge_attr = self.bond_encoder(edge_attr)
+            if edge_attr is not None:
+                edge_attr = self.bond_encoder(edge_attr)
 
         x, _ = self.conv1(x, data.edge_index, edge_attr)
         x = self.bn1(torch.relu(x))

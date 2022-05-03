@@ -10,7 +10,7 @@ from torch_geometric.data import Batch, Data
 
 from data.custom_scheduler import BaseScheduler, StepScheduler
 from data.data_utils import scale_grad, AttributedDataLoader
-from data.metrics import eval_rocauc
+from data.metrics import eval_rocauc, eval_acc
 from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
 from imle.wrapper import imle
@@ -232,6 +232,12 @@ class Trainer:
             labels = torch.cat(labels, dim=0)
             if self.task_type == 'rocauc':
                 train_metric = eval_rocauc(labels, preds)
+            elif self.task_type == 'acc':
+                if preds.shape[1] == 1:
+                    preds = (preds > 0.).to(torch.int)
+                else:
+                    preds = torch.argmax(preds, dim=1)
+                train_metric = eval_acc(labels, preds)
             else:
                 raise NotImplementedError
             self.curves['train_metric'].append(train_metric)
@@ -290,6 +296,12 @@ class Trainer:
                 self.best_val_metric = max(self.best_val_metric, val_metric)
         elif self.task_type == 'regression':
             val_metric = 0.
+        elif self.task_type == 'acc':
+            if preds.shape[1] == 1:
+                preds = (preds > 0.).to(torch.int)
+            else:
+                preds = torch.argmax(preds, dim=1)
+            val_metric = eval_acc(labels, preds)
         else:
             raise NotImplementedError
 

@@ -29,6 +29,26 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[A
                                                                                AttributedDataLoader,
                                                                                AttributedDataLoader]:
     """
+    Distributor function
+
+    :param args:
+    :param device:
+    :return:
+    """
+    if 'ogb' in args.dataset.lower():
+        train_loader, val_loader, test_loader = get_ogb_data(args)
+    elif args.dataset == 'qm9':
+        train_loader, val_loader, test_loader = get_qm9(args, device)
+    else:
+        train_loader, val_loader, test_loader = get_TUdata(args, device)
+
+    return train_loader, val_loader, test_loader
+
+
+def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[AttributedDataLoader,
+                                                                                 AttributedDataLoader,
+                                                                                 AttributedDataLoader]:
+    """
 
     :param args
     :param device
@@ -153,8 +173,7 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[A
 
 def get_ogb_data(args: Union[Namespace, ConfigDict]) -> Tuple[AttributedDataLoader,
                                                               AttributedDataLoader,
-                                                              AttributedDataLoader,
-                                                              int]:
+                                                              AttributedDataLoader]:
     if args.imle_configs is None and args.sample_configs.sample_with_esan:
         if args.sample_configs.sample_policy in ['node', 'edge']:
             assert args.sample_configs.sample_k == -1, "ESAN supports remove one substance only"
@@ -215,7 +234,7 @@ def get_ogb_data(args: Union[Namespace, ConfigDict]) -> Tuple[AttributedDataLoad
         mean=None,
         std=None)
 
-    return train_loader, val_loader, test_loader, dataset.num_tasks
+    return train_loader, val_loader, test_loader
 
 
 def get_qm9(args, device):

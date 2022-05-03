@@ -31,3 +31,26 @@ def eval_rocauc(y_true: Union[torch.Tensor, np.ndarray], y_pred: Union[torch.Ten
         raise RuntimeError('No positively labeled data available. Cannot compute ROC-AUC.')
 
     return sum(rocauc_list) / len(rocauc_list)
+
+
+def eval_acc(y_true: Union[torch.Tensor, np.ndarray], y_pred: Union[torch.Tensor, np.ndarray]) -> float:
+    """
+    eval accuracy (potentially multi task)
+
+    :param y_true:
+    :param y_pred:
+    :return:
+    """
+    if isinstance(y_true, torch.Tensor):
+        y_true = y_true.detach().cpu().numpy()
+    if isinstance(y_pred, torch.Tensor):
+        y_pred = y_pred.detach().cpu().numpy()
+
+    acc_list = []
+
+    for i in range(y_true.shape[1]):
+        is_labeled = y_true[:, i] == y_true[:, i]
+        correct = y_true[is_labeled, i] == y_pred[is_labeled, i]
+        acc_list.append(float(np.sum(correct)) / len(correct))
+
+    return sum(acc_list) / len(acc_list)

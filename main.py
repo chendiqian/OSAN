@@ -103,7 +103,7 @@ def run(fixed):
                                num_layers=args.num_convlayers).to(device)
     elif args.model.lower() == 'gin-virtual':
         model = OGBGNN(gnn_type='gin',
-                       num_tasks=num_tasks,
+                       num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
                        num_layer=args.num_convlayers,
                        emb_dim=args.hid_size,
                        drop_ratio=args.dropout,
@@ -137,7 +137,7 @@ def run(fixed):
                            args.hid_size,
                            args.sample_configs.num_subgraphs,
                            normalize=args.imle_configs.norm_logits,
-                           encoder='ogb' in args.dataset.lower()).to(device)
+                           encoder='ogb' in args.dataset.lower() or 'exp' in args.dataset.lower()).to(device)
     else:
         emb_model = None
 

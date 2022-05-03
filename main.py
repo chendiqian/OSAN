@@ -13,8 +13,8 @@ from numpy import std as np_std
 
 from models import NetGINE, NetGCN, NetGINEAlchemy, OGBGNN, NetGINE_QM
 from training.trainer import Trainer
-from data.get_data import get_data, get_ogb_data, get_qm9
-from data.const import DATASET_FEATURE_STAT_DICT
+from data.get_data import get_data
+from data.const import DATASET_FEATURE_STAT_DICT, TASK_TYPE_DICT, CRITERION_DICT
 
 ex = Experiment()
 
@@ -82,28 +82,10 @@ def run(fixed):
     logger = get_logger(folder_name)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    num_tasks = None
-    if 'ogb' in args.dataset.lower():
-        train_loader, val_loader, test_loader, num_tasks = get_ogb_data(args)
-    elif args.dataset == 'qm9':
-        train_loader, val_loader, test_loader = get_qm9(args, device)
-    else:
-        train_loader, val_loader, test_loader = get_data(args, device)
+    train_loader, val_loader, test_loader = get_data(args, device)
 
-    if args.dataset.lower() in ['zinc', 'alchemy']:
-        task_type = 'regression'
-        criterion = torch.nn.L1Loss()
-    elif args.dataset.lower() in ['ogbg-molesol']:
-        task_type = 'regression'
-        criterion = torch.nn.MSELoss()
-    elif args.dataset.lower() in ['ogbg-molbace']:
-        task_type = 'rocauc'
-        criterion = torch.nn.BCEWithLogitsLoss()
-    elif args.dataset.lower() == 'qm9':
-        task_type = 'regression'
-        criterion = torch.nn.L1Loss()
-    else:
-        raise NotImplementedError
+    task_type = TASK_TYPE_DICT[args.dataset.lower()]
+    criterion = CRITERION_DICT[args.dataset.lower()]
 
     if args.model.lower() == 'gine':
         model = NetGINE(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
@@ -128,7 +110,14 @@ def run(fixed):
                        virtual_node=True).to(device)
     elif args.model.lower() == 'ogb_gin':
         model = OGBGNN(gnn_type='gin',
-                       num_tasks=num_tasks,
+                       num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
+                       num_layer=args.num_convlayers,
+                       emb_dim=args.hid_size,
+                       drop_ratio=args.dropout,
+                       virtual_node=False).to(device)
+    elif args.model.lower() == 'ogb_originalgin':
+        model = OGBGNN(gnn_type='originalgin',
+                       num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
                        num_layer=args.num_convlayers,
                        emb_dim=args.hid_size,
                        drop_ratio=args.dropout,

@@ -116,8 +116,6 @@ class NetGINE(torch.nn.Module):
         if hasattr(data, 'inter_graph_idx') and data.inter_graph_idx is not None:
             x = global_mean_pool(x, data.inter_graph_idx)
         x = self.fc4(x)
-        if x.shape[-1] == 1:
-            x = x.reshape(-1)
         return x
 
     def reset_parameters(self):

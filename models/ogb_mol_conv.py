@@ -10,6 +10,44 @@ from torch_geometric.utils import degree
 from .encoder import AtomEncoder, BondEncoder
 
 
+class OriginalGINConv(MessagePassing):
+    def __init__(self, emb_dim):
+        """
+            emb_dim (int): node embedding dimensionality
+        """
+
+        super(OriginalGINConv, self).__init__(aggr="add")
+
+        self.mlp = torch.nn.Sequential(torch.nn.Linear(emb_dim, 2 * emb_dim),
+                                       torch.nn.BatchNorm1d(2 * emb_dim),
+                                       torch.nn.ReLU(),
+                                       torch.nn.Linear(2 * emb_dim, emb_dim))
+        self.eps = torch.nn.Parameter(torch.Tensor([0.]))
+
+    def forward(self, x, edge_index, edge_attr, edge_weight):
+        if edge_weight is not None and edge_weight.ndim < 2:
+            edge_weight = edge_weight[:, None]
+
+        out = self.mlp((1 + self.eps) * x + self.propagate(edge_index,
+                                                           x=x,
+                                                           edge_weight=edge_weight))
+        return out
+
+    def message(self, x_j, edge_weight):
+        m = x_j
+        return m * edge_weight if edge_weight is not None else m
+
+    def update(self, aggr_out):
+        return aggr_out
+
+    def reset_parameters(self):
+        lst = torch.nn.ModuleList(self.mlp)
+        for l in lst:
+            if not isinstance(l, torch.nn.ReLU):
+                l.reset_parameters()
+        self.eps = torch.nn.Parameter(torch.Tensor([0.]).to(self.eps.device))
+
+
 # GIN convolution along the graph structure
 class GINConv(MessagePassing):
     def __init__(self, emb_dim):
@@ -129,6 +167,8 @@ class GNN_node(torch.nn.Module):
                 self.convs.append(GINConv(emb_dim))
             elif gnn_type == 'gcn':
                 self.convs.append(GCNConv(emb_dim))
+            elif gnn_type == 'originalgin':
+                self.convs.append(OriginalGINConv(emb_dim))
             else:
                 raise ValueError('Undefined GNN type called {}'.format(gnn_type))
 

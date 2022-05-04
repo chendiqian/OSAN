@@ -4,6 +4,7 @@ import os
 import yaml
 from ml_collections import ConfigDict
 from sacred import Experiment
+from datetime import datetime
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -50,7 +51,7 @@ def naming(args) -> str:
 
 
 def prepare_exp(folder_name: str, num_run: int, num_fold: int) -> Tuple[SummaryWriter, str]:
-    run_folder = os.path.join(folder_name, f'run{num_run}_fold{num_fold}')
+    run_folder = os.path.join(folder_name, f'run{num_run}_fold{num_fold}_{str(datetime.now())}')
     os.mkdir(run_folder)
     writer = SummaryWriter(run_folder)
     return writer, run_folder

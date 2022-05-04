@@ -9,7 +9,7 @@ import torch.linalg
 from torch_geometric.data import Batch, Data
 
 from data.custom_scheduler import BaseScheduler, StepScheduler
-from data.data_utils import scale_grad, AttributedDataLoader
+from data.data_utils import scale_grad, AttributedDataLoader, IsBetter
 from data.metrics import eval_rocauc, eval_acc
 from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
@@ -60,12 +60,13 @@ class Trainer:
         super(Trainer, self).__init__()
 
         self.task_type = task_type
+        self.metric_comparator = IsBetter(self.task_type)
         self.voting = voting
         self.criterion = criterion
         self.device = device
 
         self.best_val_loss = 1e5
-        self.best_val_metric = 0.
+        self.best_val_metric = None
         self.patience = 0
         self.max_patience = max_patience
 
@@ -93,7 +94,7 @@ class Trainer:
     def clear_stats(self):
         self.curves = defaultdict(list)
         self.best_val_loss = 1e5
-        self.best_val_metric = 0.
+        self.best_val_metric = None
         self.patience = 0
 
     def get_aux_loss(self, logits: torch.Tensor):
@@ -227,6 +228,9 @@ class Trainer:
                 preds.append(pred)
                 labels.append(data.y)
 
+        train_loss = train_losses.item() / num_graphs
+        self.curves['train_loss'].append(train_loss)
+
         if isinstance(preds, list):
             preds = torch.cat(preds, dim=0)
             labels = torch.cat(labels, dim=0)
@@ -240,12 +244,9 @@ class Trainer:
                 train_metric = eval_acc(labels, preds)
             else:
                 raise NotImplementedError
-            self.curves['train_metric'].append(train_metric)
         else:
-            train_metric = 0.
-
-        train_loss = train_losses.item() / num_graphs
-        self.curves['train_loss'].append(train_loss)
+            train_metric = train_loss
+        self.curves['train_metric'].append(train_metric)
 
         if emb_model is not None:
             del self.imle_scheduler.graphs
@@ -291,11 +292,8 @@ class Trainer:
         val_loss = self.criterion(preds, labels).item()
         if self.task_type == 'rocauc':
             val_metric = eval_rocauc(labels, preds)
-            if not test:
-                self.curves['val_metric'].append(val_metric)
-                self.best_val_metric = max(self.best_val_metric, val_metric)
         elif self.task_type == 'regression':
-            val_metric = 0.
+            val_metric = val_loss
         elif self.task_type == 'acc':
             if preds.shape[1] == 1:
                 preds = (preds > 0.).to(torch.int)
@@ -307,25 +305,28 @@ class Trainer:
 
         early_stop = False
         if not test:
+            self.curves['val_metric'].append(val_metric)
+            self.curves['val_loss'].append(val_loss)
+
+            self.best_val_loss = min(self.best_val_loss, val_loss)
+
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler.step(val_loss)
+                raise NotImplementedError("Need to specify max or min plateau")
             else:
                 scheduler.step()
             if scheduler_embd is not None:
                 if isinstance(scheduler_embd, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    scheduler_embd.step(val_loss)
+                    raise NotImplementedError("Need to specify max or min plateau")
                 else:
                     scheduler_embd.step()
 
-            if val_loss < self.best_val_loss:
-                self.best_val_loss = val_loss
+            if self.metric_comparator(val_metric, self.best_val_metric):
+                self.best_val_metric = val_metric
                 self.patience = 0
             else:
                 self.patience += 1
                 if self.patience > self.max_patience:
                     early_stop = True
-
-            self.curves['val_loss'].append(val_loss)
 
         if emb_model is not None:
             del self.imle_scheduler.graphs

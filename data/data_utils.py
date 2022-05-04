@@ -1,5 +1,5 @@
 from collections import namedtuple, deque
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 
 import numba
 import numpy as np
@@ -157,3 +157,23 @@ def pair_wise_idx(n_subg: int, device: TorchDevice) -> Tuple[Tensor, Tensor]:
     receivers = (receivers + torch.arange(n_subg - 1, device=device)[:, None] + 1) % n_subg
     receivers = receivers.reshape(-1)
     return senders, receivers
+
+
+class IsBetter:
+    """
+    A comparator for different metrics, to unify >= and <=
+
+    """
+    def __init__(self, task_type):
+        self.task_type = task_type
+
+    def __call__(self, val1: float, val2: Optional[float]) -> bool:
+        if val2 is None:
+            return True
+
+        if self.task_type in ['regression']:
+            return val1 <= val2
+        elif self.task_type in ['rocauc', 'acc']:
+            return val1 >= val2
+        else:
+            raise ValueError

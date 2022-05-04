@@ -1,19 +1,23 @@
 import os
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 from argparse import Namespace
 from ml_collections import ConfigDict
 
+import torch
 import numpy as np
 from torch import device as torchdevice
 from torch_geometric.datasets import TUDataset, QM9
 from torch_geometric.transforms import Compose, Distance
 from ogb.graphproppred import PygGraphPropPredDataset
+from sklearn.model_selection import StratifiedKFold
 
 from data.planarsatpairsdataset import PlanarSATPairsDataset
 from data.custom_dataloader import MYDataLoader
 from data.data_utils import GraphToUndirected, GraphCoalesce, AttributedDataLoader
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler
+
+DATASET = (PlanarSATPairsDataset, TUDataset, QM9, PygGraphPropPredDataset)
 
 TRANSFORM_DICT = {'node': RawNodeSampler,
                   'edge': RawEdgeSampler,
@@ -58,9 +62,9 @@ def get_transform(args: Union[Namespace, ConfigDict]):
     return transform, sample_collator
 
 
-def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[AttributedDataLoader,
-                                                                               AttributedDataLoader,
-                                                                               AttributedDataLoader]:
+def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[List[AttributedDataLoader],
+                                                                               List[AttributedDataLoader],
+                                                                               List[AttributedDataLoader]]:
     """
     Distributor function
 
@@ -82,29 +86,64 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[A
     else:
         raise ValueError
 
-    train_loader = AttributedDataLoader(
-        loader=MYDataLoader(train_set,
-                            batch_size=args.batch_size,
-                            shuffle=not args.debug,
-                            subgraph_loader=sample_collator),
-        mean=mean,
-        std=std)
-    test_loader = AttributedDataLoader(
-        loader=MYDataLoader(test_set,
-                            batch_size=args.batch_size,
-                            shuffle=False,
-                            subgraph_loader=sample_collator),
-        mean=mean,
-        std=std)
-    val_loader = AttributedDataLoader(
-        loader=MYDataLoader(val_set,
-                            batch_size=args.batch_size,
-                            shuffle=False,
-                            subgraph_loader=sample_collator),
-        mean=mean,
-        std=std)
+    if isinstance(train_set, list):
+        train_loaders = [AttributedDataLoader(
+            loader=MYDataLoader(t,
+                                batch_size=args.batch_size,
+                                shuffle=not args.debug,
+                                subgraph_loader=sample_collator),
+            mean=mean,
+            std=std) for t in train_set]
+    elif isinstance(train_set, DATASET):
+        train_loaders = [AttributedDataLoader(
+            loader=MYDataLoader(train_set,
+                                batch_size=args.batch_size,
+                                shuffle=not args.debug,
+                                subgraph_loader=sample_collator),
+            mean=mean,
+            std=std)]
+    else:
+        raise TypeError
 
-    return train_loader, val_loader, test_loader
+    if isinstance(val_set, list):
+        val_loaders = [AttributedDataLoader(
+            loader=MYDataLoader(t,
+                                batch_size=args.batch_size,
+                                shuffle=False,
+                                subgraph_loader=sample_collator),
+            mean=mean,
+            std=std) for t in val_set]
+    elif isinstance(val_set, DATASET):
+        val_loaders = [AttributedDataLoader(
+            loader=MYDataLoader(val_set,
+                                batch_size=args.batch_size,
+                                shuffle=False,
+                                subgraph_loader=sample_collator),
+            mean=mean,
+            std=std)]
+    else:
+        raise TypeError
+
+    if isinstance(test_set, list):
+        test_loaders = [AttributedDataLoader(
+            loader=MYDataLoader(t,
+                                batch_size=args.batch_size,
+                                shuffle=False,
+                                subgraph_loader=sample_collator),
+            mean=mean,
+            std=std) for t in test_set]
+    elif isinstance(test_set, DATASET):
+        test_loaders = [AttributedDataLoader(
+            loader=MYDataLoader(test_set,
+                                batch_size=args.batch_size,
+                                shuffle=False,
+                                subgraph_loader=sample_collator),
+            mean=mean,
+            std=std)]
+    else:
+        raise TypeError
+
+    return train_loaders, val_loaders, test_loaders
 
 
 def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice):
@@ -249,14 +288,25 @@ def get_synthdata(args):
                                     pre_transform=pre_transform)
     dataset.data.y = dataset.data.y[:, None]
 
-    # TODO: update train/val/test split!!!!!!
+    def separate_data(fold_idx):
+        # code taken from GIN and adapted
+        # since we only consider train and valid, use valid as test
+        assert 0 <= fold_idx < 10, "fold_idx must be from 0 to 9."
+        skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
 
-    train_indices = np.arange(1000)
-    val_indices = np.arange(1000, 1100)
-    test_indices = np.arange(1100, 1200)
+        labels = dataset.data.y.numpy()
+        idx_list = []
+        for idx in skf.split(np.zeros(len(labels)), labels):
+            idx_list.append(idx)
+        train_idx, test_idx = idx_list[fold_idx]
 
-    train_set = dataset[train_indices]
-    val_set = dataset[val_indices]
-    test_set = dataset[test_indices]
+        return torch.tensor(train_idx), torch.tensor(test_idx), torch.tensor(test_idx)
 
-    return train_set, val_set, test_set, None, None, sample_collator
+    train_sets, val_sets, test_sets = [], [], []
+    for idx in range(10):
+        train, val, test = separate_data(idx)
+        train_sets.append(dataset[train])
+        val_sets.append(dataset[val])
+        test_sets.append(dataset[test])
+
+    return train_sets, val_sets, test_sets, None, None, sample_collator

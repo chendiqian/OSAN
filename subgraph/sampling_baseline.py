@@ -66,7 +66,11 @@ def edge_rand_sampling(graph: Data,
 
     n_edge = edge_index.shape[1]
     if n_edge == 0 or edge_per_subgraph > n_edge:
-        return [graph for _ in range(n_subgraphs)]
+        return [Data(x=graph.x,
+                     edge_index=graph.edge_index,
+                     edge_attr=graph.edge_attr,
+                     num_nodes=graph.num_nodes,
+                     y=graph.y)] * n_subgraphs
 
     if edge_per_subgraph < 0:  # drop edges
         edge_per_subgraph += n_edge
@@ -199,8 +203,8 @@ def khop_subgraph_sampling_dual(data: Data,
                                               data.num_nodes,
                                               relabel=False)
 
-        if len(node_idx) == data.num_nodes:   # never delete all nodes
-            node_idx = np.random.randint(0, data.num_nodes, 1)   # pick a random one
+        if len(node_idx) == data.num_nodes:  # never delete all nodes
+            node_idx = np.random.randint(0, data.num_nodes, 1)  # pick a random one
         else:
             node_idx = np.setdiff1d(np.arange(data.num_nodes), node_idx, assume_unique=True)
 
@@ -247,7 +251,11 @@ def greedy_expand_sampling(graph: Data,
     :return:
     """
     if node_per_subgraph >= graph.num_nodes:
-        return [graph] * n_subgraphs
+        return [Data(x=graph.x,
+                     edge_index=graph.edge_index,
+                     edge_attr=graph.edge_attr,
+                     num_nodes=graph.num_nodes,
+                     y=graph.y)] * n_subgraphs
 
     edge_index = graph.edge_index.cpu().numpy()
     graphs = [Data(x=graph.x,

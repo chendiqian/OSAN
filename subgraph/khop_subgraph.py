@@ -64,25 +64,35 @@ def parallel_k_hop_neighbor(edge_index: np.ndarray,
                             instance_weight: np.array,
                             num_nodes: int,
                             khop: int,
-                            relabel: bool):
+                            relabel: bool,
+                            dual: bool):
     """
+    If not dual, select the khop subgraph with the highest sum of weights.
+    else select the subgraph with min sum of weights
 
     :param edge_index:
     :param instance_weight:
     :param num_nodes:
     :param khop:
     :param relabel:
+    :param dual:
     :return:
     """
     nodes = np.zeros(0, dtype=np.int64)
-    best_ref = -1.e10
+    best_ref = -1.e10 if not dual else 1.e10
 
     for i in range(num_nodes):
         node_idx, _, _ = numba_k_hop_subgraph(edge_index, numba.int64(i), khop, num_nodes, relabel)
-        ref = instance_weight[node_idx].sum()
-        if ref > best_ref:
-            best_ref = ref
-            nodes = node_idx
+        if dual:
+            ref = instance_weight[node_idx].mean()
+            if ref < best_ref:
+                best_ref = ref
+                nodes = node_idx
+        else:
+            ref = instance_weight[node_idx].sum()
+            if ref > best_ref:
+                best_ref = ref
+                nodes = node_idx
 
     return nodes
 
@@ -133,7 +143,30 @@ def khop_global(graph: Data,
     edge_index = graph.edge_index.cpu().numpy()
 
     for i in range(instance_weight.shape[1]):
-        _node_idx = parallel_k_hop_neighbor(edge_index, instance_weight[:, i], graph.num_nodes, khop, False)
+        _node_idx = parallel_k_hop_neighbor(edge_index, instance_weight[:, i], graph.num_nodes, khop, False, False)
         sampled_masks[_node_idx, i] = 1.0
+
+    return sampled_masks
+
+
+def khop_global_dual(graph: Data, khop: int, weights: Optional[Tensor]) -> Tensor:
+    """
+    Instead of sampling khop neighbors of a seed node, we delete khop nodes of a seed node.
+
+    :param graph:
+    :param khop:
+    :param weights:
+    :return:
+    """
+    sampled_masks = torch.ones_like(weights, dtype=torch.float32, device=weights.device)
+    max_idx = torch.argmax(weights, dim=0)
+    np_weight = weights.cpu().numpy()
+
+    edge_index = graph.edge_index.cpu().numpy()
+    for i in range(np_weight.shape[1]):
+        _node_idx = parallel_k_hop_neighbor(edge_index, np_weight[:, i], graph.num_nodes, khop, False, True)
+        sampled_masks[_node_idx, i] = 0.0
+        if sampled_masks[:, i].sum() == 0:   # never delete all the nodes
+            sampled_masks[max_idx[i], i] = 1.0
 
     return sampled_masks

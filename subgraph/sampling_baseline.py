@@ -1,6 +1,7 @@
 from typing import List, Tuple
 import random
 
+import numpy as np
 import torch
 from torch import Tensor, LongTensor
 from torch_geometric.data import Data
@@ -165,6 +166,45 @@ def khop_subgraph_sampling(data: Data,
                            edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,
                            num_nodes=num_nodes,
                            y=data.y))
+    return graphs
+
+
+def khop_subgraph_sampling_dual(data: Data,
+                                n_subgraphs: int,
+                                khop: int = 3,
+                                relabel: bool = False,
+                                add_full_graph: bool = False) -> List[Data]:
+    """
+    delete khop subgraph of a seed node
+
+    :param data:
+    :param n_subgraphs:
+    :param khop:
+    :param relabel:
+    :param add_full_graph:
+    :return:
+    """
+    sample_indices = random.choices(range(data.num_nodes), k=n_subgraphs)
+    graphs = [Data(x=data.x,
+                   edge_index=data.edge_index,
+                   edge_attr=data.edge_attr,
+                   num_nodes=data.num_nodes,
+                   y=data.y)] if add_full_graph else []
+
+    np_edge_index = data.edge_index.cpu().numpy()
+    for idx in sample_indices:
+        node_idx, _, _ = numba_k_hop_subgraph(np_edge_index,
+                                              idx,
+                                              khop,
+                                              data.num_nodes,
+                                              relabel=False)
+
+        if len(node_idx) == data.num_nodes:   # never delete all nodes
+            node_idx = np.random.randint(0, data.num_nodes, 1)   # pick a random one
+        else:
+            node_idx = np.setdiff1d(np.arange(data.num_nodes), node_idx, assume_unique=True)
+
+        graphs.append(nodesubset_to_subgraph(data, torch.from_numpy(node_idx), relabel))
     return graphs
 
 

@@ -13,7 +13,7 @@ from torch_geometric.utils import to_undirected
 
 from subgraph.construct import nodesubset_to_subgraph
 from subgraph.sampling_baseline import node_rand_sampling, edge_rand_sampling, edge_sample_preproc, khop_subgraph_sampling, \
-    greedy_expand_sampling, max_spanning_tree_subgraph
+    greedy_expand_sampling, max_spanning_tree_subgraph, khop_subgraph_sampling_dual
 
 
 class SamplerOnTheFly:
@@ -67,6 +67,16 @@ class RawGreedyExpand(SamplerOnTheFly):
 class RawMSTSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
         subgraphs = max_spanning_tree_subgraph(data, self.n_subgraphs, self.add_full_graph)
+        return subgraphs
+
+
+class RawKhopDualSampler(SamplerOnTheFly):
+    def __call__(self, data: Union[Data, Batch]) -> List[Data]:
+        subgraphs = khop_subgraph_sampling_dual(data,
+                                                self.n_subgraphs,
+                                                self.sample_k,
+                                                self.relabel,
+                                                self.add_full_graph)
         return subgraphs
 
 

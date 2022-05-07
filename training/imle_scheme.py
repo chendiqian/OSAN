@@ -2,7 +2,7 @@ from typing import Tuple
 
 import torch
 
-from subgraph.khop_subgraph import khop_subgraphs, khop_global
+from subgraph.khop_subgraph import khop_subgraphs, khop_global, khop_global_dual
 from subgraph.greedy_expanding_tree import greedy_expand_tree
 from subgraph.mst_subgraph import mst_subgraph_sampling
 from subgraph.or_optimal_subgraph import get_or_suboptim_subgraphs, get_or_optim_subgraphs
@@ -106,6 +106,8 @@ class IMLEScheme:
                 mask = khop_subgraphs(self.graphs[i], self.sample_k, instance_weight=logit)
             elif self.imle_sample_policy == 'khop_global':
                 mask = khop_global(self.graphs[i], self.sample_k, instance_weight=logit)
+            elif self.imle_sample_policy == 'khop_global_dual':
+                mask = khop_global_dual(self.graphs[i], self.sample_k, logit)
             elif self.imle_sample_policy == 'mst':
                 mask = mst_subgraph_sampling(self.graphs[i], logit).T
             elif self.imle_sample_policy == 'greedy_exp':

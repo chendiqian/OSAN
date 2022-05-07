@@ -15,13 +15,14 @@ from data.planarsatpairsdataset import PlanarSATPairsDataset
 from data.custom_dataloader import MYDataLoader
 from data.data_utils import GraphToUndirected, GraphCoalesce, AttributedDataLoader
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
-    RawGreedyExpand, RawMSTSampler
+    RawGreedyExpand, RawMSTSampler, RawKhopDualSampler
 
 DATASET = (PlanarSATPairsDataset, TUDataset, QM9, PygGraphPropPredDataset)
 
 TRANSFORM_DICT = {'node': RawNodeSampler,
                   'edge': RawEdgeSampler,
                   'khop_subgraph': RawKhopSampler,
+                  'khop_dual': RawKhopDualSampler,
                   'greedy_exp': RawGreedyExpand,
                   'mst': RawMSTSampler, }
 

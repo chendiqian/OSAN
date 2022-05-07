@@ -125,6 +125,7 @@ class Trainer:
                                        'node_heuristic',
                                        'khop_subgraph',
                                        'khop_global',
+                                       'khop_global_dual',
                                        'greedy_exp',
                                        'or',
                                        'or_optim']:

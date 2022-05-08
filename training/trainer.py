@@ -211,7 +211,8 @@ class Trainer:
                 data, aux_loss = self.emb_model_forward(data, emb_model, train=True)
 
             pred = model(data)
-            loss = self.criterion(pred, data.y.to(torch.float))
+            is_labeled = data.y == data.y
+            loss = self.criterion(pred[is_labeled], data.y[is_labeled].to(torch.float))
             train_losses += loss.detach() * data.num_graphs  # aux loss not taken into account
             if aux_loss is not None:
                 loss += aux_loss
@@ -290,7 +291,8 @@ class Trainer:
 
         preds = torch.cat(preds, dim=0)
         labels = torch.cat(labels, dim=0)
-        val_loss = self.criterion(preds, labels).item()
+        is_labeled = labels == labels
+        val_loss = self.criterion(preds[is_labeled], labels[is_labeled]).item()
         if self.task_type == 'rocauc':
             val_metric = eval_rocauc(labels, preds)
         elif self.task_type == 'regression':

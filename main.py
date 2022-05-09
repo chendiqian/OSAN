@@ -12,6 +12,7 @@ from numpy import mean as np_mean
 from numpy import std as np_std
 
 from models import NetGINE, NetGCN, NetGINEAlchemy, OGBGNN, NetGINE_QM
+from models.esan_zinc_model import ZincAtomEncoder, GNN, DSnetwork
 from training.trainer import Trainer
 from data.get_data import get_data
 from data.const import DATASET_FEATURE_STAT_DICT, TASK_TYPE_DICT, CRITERION_DICT
@@ -59,15 +60,16 @@ def prepare_exp(folder_name: str, num_run: int, num_fold: int) -> Tuple[SummaryW
 
 @ex.automain
 def run(fixed):
-    with open(f"./configs/{fixed['dataset'].lower()}/common_configs.yaml", 'r') as stream:
-        try:
-            common_configs = yaml.safe_load(stream)
-            common_configs = common_configs['common']
-        except yaml.YAMLError as exc:
-            print(exc)
+    if not ('no_default' in fixed and fixed['no_default']):
+        with open(f"./configs/{fixed['dataset'].lower()}/common_configs.yaml", 'r') as stream:
+            try:
+                common_configs = yaml.safe_load(stream)
+                common_configs = common_configs['common']
+                fixed.update(common_configs)
+            except yaml.YAMLError as exc:
+                print(exc)
 
-    common_configs.update(fixed)
-    args = ConfigDict(common_configs)
+    args = ConfigDict(fixed)
     hparams = naming(args)
 
     if not os.path.isdir(args.log_path):
@@ -128,6 +130,16 @@ def run(fixed):
                            args.hid_size,
                            args.num_convlayers,
                            DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
+    elif args.model.lower() == 'zincgin':   # ESAN's model
+        subgraph_gnn = GNN(gnn_type=args.model, num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
+                           num_layer=args.num_convlayers, in_dim=args.hid_size,
+                           emb_dim=args.hid_size, drop_ratio=args.dropout, JK=args.jk,
+                           graph_pooling='mean', feature_encoder=ZincAtomEncoder(policy=None, emb_dim=args.hid_size)
+                           ).to(device)
+        model = DSnetwork(subgraph_gnn=subgraph_gnn,
+                          channels=args.channels,
+                          num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
+                          invariant=args.dataset.lower() == 'zinc').to(device)
     else:
         raise NotImplementedError
 

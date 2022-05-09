@@ -14,7 +14,7 @@ fixed:
   batch_size: 128
   lr: 1.e-3
   min_epochs: 700
-  max_epochs: 400
+  max_epochs: 1000
   patience: 100
   lr_steps: [ 400, 600 ]
   jk: 'concat'

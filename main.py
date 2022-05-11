@@ -11,11 +11,10 @@ from torch.utils.tensorboard import SummaryWriter
 from numpy import mean as np_mean
 from numpy import std as np_std
 
-from models import NetGINE, NetGCN, NetGINEAlchemy, OGBGNN, NetGINE_QM
-from models.esan_zinc_model import ZincAtomEncoder, GNN, DSnetwork
+from models.get_model import get_model
 from training.trainer import Trainer
 from data.get_data import get_data
-from data.const import DATASET_FEATURE_STAT_DICT, TASK_TYPE_DICT, CRITERION_DICT
+from data.const import TASK_TYPE_DICT, CRITERION_DICT
 
 ex = Experiment()
 
@@ -89,69 +88,8 @@ def run(fixed):
     task_type = TASK_TYPE_DICT[args.dataset.lower()]
     criterion = CRITERION_DICT[args.dataset.lower()]
 
-    if args.model.lower() == 'gine':
-        model = NetGINE(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
-                        DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
-                        args.hid_size,
-                        args.dropout,
-                        args.num_convlayers,
-                        jk=args.gnn_jk,
-                        num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
-    elif args.model.lower() == 'gine_alchemy':
-        model = NetGINEAlchemy(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
-                               DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
-                               args.hid_size,
-                               num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
-                               num_layers=args.num_convlayers).to(device)
-    elif args.model.lower() == 'gin-virtual':
-        model = OGBGNN(gnn_type='gin',
-                       num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
-                       num_layer=args.num_convlayers,
-                       emb_dim=args.hid_size,
-                       drop_ratio=args.dropout,
-                       virtual_node=True).to(device)
-    elif args.model.lower() == 'ogb_gin':
-        model = OGBGNN(gnn_type='gin',
-                       num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
-                       num_layer=args.num_convlayers,
-                       emb_dim=args.hid_size,
-                       drop_ratio=args.dropout,
-                       virtual_node=False).to(device)
-    elif args.model.lower() == 'ogb_originalgin':
-        model = OGBGNN(gnn_type='originalgin',
-                       num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
-                       num_layer=args.num_convlayers,
-                       emb_dim=args.hid_size,
-                       drop_ratio=args.dropout,
-                       virtual_node=False).to(device)
-    elif args.model.lower() == 'gine_qm9':
-        model = NetGINE_QM(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
-                           DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
-                           args.hid_size,
-                           args.num_convlayers,
-                           DATASET_FEATURE_STAT_DICT[args.dataset]['num_class']).to(device)
-    elif args.model.lower() == 'zincgin':   # ESAN's model
-        subgraph_gnn = GNN(gnn_type=args.model, num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
-                           num_layer=args.num_convlayers, in_dim=args.hid_size,
-                           emb_dim=args.hid_size, drop_ratio=args.dropout, JK=args.jk,
-                           graph_pooling='mean', feature_encoder=ZincAtomEncoder(policy=None, emb_dim=args.hid_size)
-                           ).to(device)
-        model = DSnetwork(subgraph_gnn=subgraph_gnn,
-                          channels=args.channels,
-                          num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
-                          invariant=args.dataset.lower() == 'zinc').to(device)
-    else:
-        raise NotImplementedError
-
-    if args.imle_configs is not None:
-        emb_model = NetGCN(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
-                           DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
-                           args.hid_size,
-                           args.sample_configs.num_subgraphs,
-                           normalize=args.imle_configs.norm_logits,
-                           encoder='ogb' in args.dataset.lower() or 'exp' in args.dataset.lower()).to(device)
-    else:
-        emb_model = None
+    model, emb_model = get_model(args)
+    model, emb_model = model.to(device), emb_model.to(device)
 
     trainer = Trainer(task_type=task_type,
                       voting=args.voting,

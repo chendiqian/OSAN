@@ -191,7 +191,6 @@ class SyncMeanTimer:
 
     def synctimer(self):
         if self.device != torch.device('cpu'):
-            pdb.set_trace()
             torch.cuda.synchronize()
         return time.time()
 

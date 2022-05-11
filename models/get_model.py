@@ -68,7 +68,7 @@ def get_model(args):
                            args.hid_size,
                            args.sample_configs.num_subgraphs,
                            normalize=args.imle_configs.norm_logits,
-                           encoder='ogb' in args.dataset.lower() or 'exp' in args.dataset.lower()).to(device)
+                           encoder='ogb' in args.dataset.lower() or 'exp' in args.dataset.lower())
     else:
         emb_model = None
 

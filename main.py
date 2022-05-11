@@ -15,6 +15,7 @@ from models.get_model import get_model
 from training.trainer import Trainer
 from data.get_data import get_data
 from data.const import TASK_TYPE_DICT, CRITERION_DICT
+from data.data_utils import SyncMeanTimer
 
 ex = Experiment()
 
@@ -59,6 +60,7 @@ def prepare_exp(folder_name: str, num_run: int, num_fold: int) -> Tuple[SummaryW
 
 @ex.automain
 def run(fixed):
+    fixed = dict(fixed)
     if not ('no_default' in fixed and fixed['no_default']):
         with open(f"./configs/{fixed['dataset'].lower()}/common_configs.yaml", 'r') as stream:
             try:
@@ -89,7 +91,9 @@ def run(fixed):
     criterion = CRITERION_DICT[args.dataset.lower()]
 
     model, emb_model = get_model(args)
-    model, emb_model = model.to(device), emb_model.to(device)
+    model = model.to(device)
+    if emb_model is not None:
+        emb_model.to(device)
 
     trainer = Trainer(task_type=task_type,
                       voting=args.voting,
@@ -103,6 +107,7 @@ def run(fixed):
     test_losses = [[] for _ in range(args.num_runs)]
     best_val_metrics = [[] for _ in range(args.num_runs)]
     test_metrics = [[] for _ in range(args.num_runs)]
+    time_per_epoch = []
 
     for _run in range(args.num_runs):
         for _fold, (train_loader, val_loader, test_loader) in enumerate(zip(train_loaders, val_loaders, test_loaders)):
@@ -124,7 +129,9 @@ def run(fixed):
             writer, run_folder = prepare_exp(folder_name, _run, _fold)
 
             best_epoch = 0
+            epoch_timer = SyncMeanTimer(device)
             for epoch in range(args.max_epochs):
+                start_time = epoch_timer(True)
                 train_loss, train_metric = trainer.train(train_loader,
                                                          emb_model,
                                                          model,
@@ -136,6 +143,7 @@ def run(fixed):
                                                                      scheduler_embd,
                                                                      scheduler,
                                                                      test=False)
+                end_time = epoch_timer(False)
 
                 if epoch > args.min_epochs and early_stop:
                     logger.info('early stopping')
@@ -153,6 +161,7 @@ def run(fixed):
                 writer.add_scalar('metric/training metric', train_metric, epoch)
                 writer.add_scalar('metric/val metric', val_metric, epoch)
                 writer.add_scalar('lr', scheduler.optimizer.param_groups[0]['lr'], epoch)
+                writer.add_scalar('time_epoch', end_time - start_time, epoch)
 
                 if trainer.patience == 0:
                     best_epoch = epoch
@@ -175,11 +184,13 @@ def run(fixed):
             logger.info(f'test metric: {test_metric}')
             logger.info(f'max_memory_allocated: {torch.cuda.max_memory_allocated()}')
             logger.info(f'memory_allocated: {torch.cuda.memory_allocated()}')
+            logger.info(f'mean time per epoch: {epoch_timer.mean_time}')
 
             best_val_losses[_run].append(trainer.best_val_loss)
             test_losses[_run].append(test_loss)
             best_val_metrics[_run].append(trainer.best_val_metric)
             test_metrics[_run].append(test_metric)
+            time_per_epoch.append(epoch_timer.mean_time)
 
             trainer.save_curve(run_folder)
             trainer.clear_stats()
@@ -196,7 +207,8 @@ def run(fixed):
                'val_loss_stats': f'mean: {np_mean(best_val_losses)}, std: {np_std(best_val_losses)}',
                'test_loss_stats': f'mean: {np_mean(test_losses)}, std: {np_std(test_losses)}',
                'val_metrics_stats': f'mean: {np_mean(best_val_metrics)}, std: {np_std(best_val_metrics)}',
-               'test_metrics_stats': f'mean: {np_mean(test_metrics)}, std: {np_std(test_metrics)}'}
+               'test_metrics_stats': f'mean: {np_mean(test_metrics)}, std: {np_std(test_metrics)}',
+               'time_stats': f'mean: {np_mean(time_per_epoch)}, std: {np_std(time_per_epoch)}'}
 
     with open(os.path.join(folder_name, 'results.txt'), 'wt') as f:
         f.write(str(results))

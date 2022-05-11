@@ -1,5 +1,7 @@
+import pdb
 from collections import namedtuple, deque
 from typing import List, Union, Tuple, Optional
+import time
 
 import numba
 import numpy as np
@@ -177,3 +179,28 @@ class IsBetter:
             return val1 >= val2
         else:
             raise ValueError
+
+
+class SyncMeanTimer:
+    def __init__(self, device):
+        self.device = device
+        self.count = 0
+        self.mean_time = 0.
+        self.last_start_time = 0.
+        self.last_end_time = 0.
+
+    def synctimer(self):
+        if self.device != torch.device('cpu'):
+            pdb.set_trace()
+            torch.cuda.synchronize()
+        return time.time()
+
+    def __call__(self, start: bool):
+        if start:
+            self.last_start_time = self.synctimer()
+            return self.last_start_time
+        else:
+            self.last_end_time = self.synctimer()
+            self.mean_time = (self.mean_time * self.count + self.last_end_time - self.last_start_time) / (self.count + 1)
+            self.count += 1
+            return self.last_end_time

@@ -2,7 +2,7 @@ import itertools
 import os
 import pickle
 from collections import defaultdict
-from typing import Union, Optional
+from typing import Union, Optional, Any
 from ml_collections import ConfigDict
 
 import torch.linalg
@@ -18,14 +18,12 @@ from subgraph.construct import (edgemasked_graphs_from_nodemask, edgemasked_grap
                                 construct_subgraph_batch, )
 from training.imle_scheme import *
 
-from models import NetGINE, NetGCN
-
 Optimizer = Union[torch.optim.Adam,
                   torch.optim.SGD]
 Scheduler = Union[torch.optim.lr_scheduler.ReduceLROnPlateau,
                   torch.optim.lr_scheduler.MultiStepLR]
-Emb_model = Union[NetGCN]
-Train_model = Union[NetGINE]
+Emb_model = Any
+Train_model = Any
 Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
 

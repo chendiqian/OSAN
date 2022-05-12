@@ -145,15 +145,15 @@ class IsBetter:
 
 
 class SyncMeanTimer:
-    def __init__(self, device):
-        self.device = device
+    def __init__(self):
         self.count = 0
         self.mean_time = 0.
         self.last_start_time = 0.
         self.last_end_time = 0.
 
-    def synctimer(self):
-        if self.device != torch.device('cpu'):
+    @classmethod
+    def synctimer(cls):
+        if torch.cuda.is_available():
             torch.cuda.synchronize()
         return time.time()
 

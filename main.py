@@ -129,9 +129,8 @@ def run(fixed):
             writer, run_folder = prepare_exp(folder_name, _run, _fold)
 
             best_epoch = 0
-            epoch_timer = SyncMeanTimer(device)
+            epoch_timer = SyncMeanTimer()
             for epoch in range(args.max_epochs):
-                start_time = epoch_timer(True)
                 train_loss, train_metric = trainer.train(train_loader,
                                                          emb_model,
                                                          model,
@@ -143,7 +142,6 @@ def run(fixed):
                                                                      scheduler_embd,
                                                                      scheduler,
                                                                      test=False)
-                end_time = epoch_timer(False)
 
                 if epoch > args.min_epochs and early_stop:
                     logger.info('early stopping')
@@ -161,7 +159,6 @@ def run(fixed):
                 writer.add_scalar('metric/training metric', train_metric, epoch)
                 writer.add_scalar('metric/val metric', val_metric, epoch)
                 writer.add_scalar('lr', scheduler.optimizer.param_groups[0]['lr'], epoch)
-                writer.add_scalar('time_epoch', end_time - start_time, epoch)
 
                 if trainer.patience == 0:
                     best_epoch = epoch
@@ -177,20 +174,21 @@ def run(fixed):
             if emb_model is not None:
                 emb_model.load_state_dict(torch.load(f'{run_folder}/embd_model_best.pt'))
 
+            start_time = epoch_timer.synctimer()
             test_loss, test_metric, _ = trainer.inference(test_loader, emb_model, model, test=True)
+            end_time = epoch_timer.synctimer()
             logger.info(f'Best val loss: {trainer.best_val_loss}')
             logger.info(f'Best val metric: {trainer.best_val_metric}')
             logger.info(f'test loss: {test_loss}')
             logger.info(f'test metric: {test_metric}')
             logger.info(f'max_memory_allocated: {torch.cuda.max_memory_allocated()}')
             logger.info(f'memory_allocated: {torch.cuda.memory_allocated()}')
-            logger.info(f'mean time per epoch: {epoch_timer.mean_time}')
 
             best_val_losses[_run].append(trainer.best_val_loss)
             test_losses[_run].append(test_loss)
             best_val_metrics[_run].append(trainer.best_val_metric)
             test_metrics[_run].append(test_metric)
-            time_per_epoch.append(epoch_timer.mean_time)
+            time_per_epoch.append(end_time - start_time)
 
             trainer.save_curve(run_folder)
             trainer.clear_stats()

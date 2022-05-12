@@ -280,11 +280,6 @@ def get_qm9(args, device):
     val_set = dataset[val_indices]
     test_set = dataset[test_indices]
 
-    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
-        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
-        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
-        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
-
     if args.normalize_label:
         mean = dataset.data.y.mean(dim=0, keepdim=True)
         std = dataset.data.y.std(dim=0, keepdim=True)
@@ -293,6 +288,11 @@ def get_qm9(args, device):
         std = std.to(device)
     else:
         mean, std = None, None
+
+    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
+        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
+        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
+        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
 
     return train_set, val_set, test_set, mean, std, sample_collator
 

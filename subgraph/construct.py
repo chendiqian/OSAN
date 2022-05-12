@@ -49,6 +49,8 @@ def edgemasked_graphs_from_nodemask(graphs: List[Data] = None,
     num_nodes, num_subgraphs = masks.shape
     num_edges = edge_index.shape[1]
 
+    graphs = graphs * num_subgraphs if not add_full_graph else graphs * (num_subgraphs + 1)
+
     transform_func = Nodemask2Edgemask.apply if grad else nodemask2edgemask
     edge_weights = transform_func(masks.T, edge_index, torch.tensor(num_nodes, device=masks.device))
 

@@ -88,7 +88,7 @@ class IMLEScheme:
         for i, logit in enumerate(local_logits):
             if self.perturb:
                 noise = torch.randn(logit.shape, device=logit.device) * logit.std(0, keepdims=True) * 0.1
-                logit = logit.clone() + noise
+                logit = logit + noise
 
             if self.imle_sample_policy == 'node':
                 if self.sample_k < 0:

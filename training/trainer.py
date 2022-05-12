@@ -1,4 +1,3 @@
-import itertools
 import os
 import pickle
 from collections import defaultdict
@@ -155,22 +154,20 @@ class Trainer:
             sample_idx = imle_sample_scheme(logits)
             if self.aux_loss_weight > 0:
                 aux_loss = self.get_aux_loss(sample_idx)
-
-            sample_idx = torch.split(sample_idx, split_idx, dim=0)
             self.noise_distribution.scale = self.noise_scale_scheduler()
-
         else:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
 
-        list_list_subgraphs, edge_weights, selected_node_masks = zip(
-            *[subgraphs_from_mask(g, i.T,
-                                  grad=train,
-                                  remove_node=self.remove_node,
-                                  add_full_graph=self.add_full_graph) for g, i in
-              zip(graphs, sample_idx)])
-        list_subgraphs = list(itertools.chain.from_iterable(list_list_subgraphs))
+        list_subgraphs, edge_weights, selected_node_masks = subgraphs_from_mask(graphs=graphs,
+                                                                                edge_index=data.edge_index,
+                                                                                masks=sample_idx,
+                                                                                grad=train,
+                                                                                remove_node=self.remove_node,
+                                                                                add_full_graph=self.add_full_graph)
+
         data = construct_subgraph_batch(list_subgraphs,
-                                        [len(g_list) for g_list in list_list_subgraphs],
+                                        len(graphs),
+                                        sample_idx.shape[-1] if not self.add_full_graph else sample_idx.shape[-1] + 1,
                                         edge_weights,
                                         selected_node_masks,
                                         self.device)
@@ -264,7 +261,7 @@ class Trainer:
                   test: bool = False):
         if emb_model is not None:
             emb_model.eval()
-            self.imle_scheduler.return_list = True
+            self.imle_scheduler.return_list = False
             self.imle_scheduler.perturb = self.voting > 1   # only perturb when voting more than once
             self.imle_scheduler.sample_rand = False  # test time, always take topk, inspite of noise perturbation
 

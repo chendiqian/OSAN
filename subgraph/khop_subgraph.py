@@ -1,3 +1,4 @@
+import pdb
 from typing import Optional, Tuple
 
 import torch
@@ -60,12 +61,12 @@ def numba_k_hop_subgraph(edge_index: np.ndarray, seed_node: int, khop: int, num_
 
 
 @numba.njit(cache=True, parallel=False)
-def parallel_k_hop_neighbor(edge_index: np.ndarray,
-                            instance_weight: np.array,
-                            num_nodes: int,
-                            khop: int,
-                            relabel: bool,
-                            dual: bool):
+def best_khop_neighbor(edge_index: np.ndarray,
+                       instance_weight: np.array,
+                       num_nodes: int,
+                       khop: int,
+                       relabel: bool,
+                       dual: bool):
     """
     If not dual, select the khop subgraph with the highest sum of weights.
     else select the subgraph with min sum of weights
@@ -97,6 +98,28 @@ def parallel_k_hop_neighbor(edge_index: np.ndarray,
     return nodes
 
 
+@numba.njit(cache=True, parallel=False)
+def parallel_khop_neighbor(edge_index: np.ndarray,
+                           num_nodes: int,
+                           max_nodes: int,
+                           khop: int):
+    """
+
+    :param edge_index:
+    :param num_nodes:
+    :param max_nodes:
+    :param khop:
+    :return:
+    """
+    masks = np.zeros((num_nodes, max_nodes), dtype=np.bool_)
+
+    for i in range(num_nodes):
+        node_idx, _, _ = numba_k_hop_subgraph(edge_index, numba.int64(i), khop, num_nodes, False)
+        for n in node_idx:
+            masks[i, n] = True
+    return masks
+
+
 def khop_subgraphs(graph: Data,
                    khop: int = 3,
                    instance_weight: Optional[Tensor] = None) -> Tensor:
@@ -125,47 +148,44 @@ def khop_subgraphs(graph: Data,
     return sampled_masks
 
 
-def khop_global(graph: Data,
-                khop: int = 3,
-                instance_weight: Optional[Tensor] = None) -> Tensor:
+def khop_global(graph: Data, weights: Optional[Tensor] = None) -> Tensor:
     """
 
     :param graph:
-    :param khop:
-    :param instance_weight: if not pruning, this should be node weight, so that the seed node is picked according to
+    :param weights: if not pruning, this should be node weight, so that the seed node is picked according to
     the highest node weight. if pruning with MST algorithm, this should be edge weight, and node weight is the scatter
      of the incident edge weights
     :return: return node mask if not pruned, else edge mask
     """
-    sampled_masks = torch.zeros_like(instance_weight, dtype=torch.float32, device=instance_weight.device)
-    instance_weight = instance_weight.cpu().numpy()
+    khop_subgraph_idx = graph.khop_idx[:, :graph.num_nodes]
+    sampled_masks = torch.empty_like(weights, dtype=torch.float32, device=weights.device)
 
-    edge_index = graph.edge_index.cpu().numpy()
-
-    for i in range(instance_weight.shape[1]):
-        _node_idx = parallel_k_hop_neighbor(edge_index, instance_weight[:, i], graph.num_nodes, khop, False, False)
-        sampled_masks[_node_idx, i] = 1.0
+    for i in range(weights.shape[1]):
+        weight = weights[:, i][None]
+        sum_of_weights = (weight * khop_subgraph_idx).sum(1)
+        idx = torch.argmax(sum_of_weights)
+        sampled_masks[:, i] = khop_subgraph_idx[idx, :]
 
     return sampled_masks
 
 
-def khop_global_dual(graph: Data, khop: int, weights: Optional[Tensor]) -> Tensor:
+def khop_global_dual(graph: Data, weights: Optional[Tensor]) -> Tensor:
     """
     Instead of sampling khop neighbors of a seed node, we delete khop nodes of a seed node.
 
     :param graph:
-    :param khop:
     :param weights:
     :return:
     """
-    sampled_masks = torch.ones_like(weights, dtype=torch.float32, device=weights.device)
+    khop_subgraph_idx = graph.khop_idx[:, :graph.num_nodes]
+    sampled_masks = torch.empty_like(weights, dtype=torch.float32, device=weights.device)
     max_idx = torch.argmax(weights, dim=0)
-    np_weight = weights.cpu().numpy()
 
-    edge_index = graph.edge_index.cpu().numpy()
-    for i in range(np_weight.shape[1]):
-        _node_idx = parallel_k_hop_neighbor(edge_index, np_weight[:, i], graph.num_nodes, khop, False, True)
-        sampled_masks[_node_idx, i] = 0.0
+    for i in range(weights.shape[1]):
+        weight = weights[:, i][None]
+        mean_of_weights = (weight * khop_subgraph_idx).sum(1) / khop_subgraph_idx.sum(1)
+        idx = torch.argmin(mean_of_weights)
+        sampled_masks[:, i] = 1 - khop_subgraph_idx[idx, :]
         if sampled_masks[:, i].sum() == 0:   # never delete all the nodes
             sampled_masks[max_idx[i], i] = 1.0
 

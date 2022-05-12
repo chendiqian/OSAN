@@ -105,9 +105,9 @@ class IMLEScheme:
             elif self.imle_sample_policy == 'khop_subgraph':
                 mask = khop_subgraphs(self.graphs[i], self.sample_k, instance_weight=logit)
             elif self.imle_sample_policy == 'khop_global':
-                mask = khop_global(self.graphs[i], self.sample_k, instance_weight=logit)
+                mask = khop_global(self.graphs[i], logit)
             elif self.imle_sample_policy == 'khop_global_dual':
-                mask = khop_global_dual(self.graphs[i], self.sample_k, logit)
+                mask = khop_global_dual(self.graphs[i], logit)
             elif self.imle_sample_policy == 'mst':
                 mask = mst_subgraph_sampling(self.graphs[i], logit).T
             elif self.imle_sample_policy == 'greedy_exp':

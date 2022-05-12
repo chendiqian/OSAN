@@ -13,7 +13,8 @@ from sklearn.model_selection import StratifiedKFold
 
 from data.planarsatpairsdataset import PlanarSATPairsDataset
 from data.custom_dataloader import MYDataLoader
-from data.data_utils import GraphToUndirected, GraphCoalesce, AttributedDataLoader
+from data.data_utils import AttributedDataLoader
+from data.data_preprocess import GraphToUndirected, GraphCoalesce, khop_data_process
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler, RawKhopDualSampler
 
@@ -215,6 +216,11 @@ def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice):
         val_set = dataset[val_indices]
         test_set = dataset[test_indices]
 
+    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
+        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
+        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
+        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
+
     return train_set, val_set, test_set, mean, std, sample_collator
 
 
@@ -235,7 +241,16 @@ def get_ogb_data(args: Union[Namespace, ConfigDict]):
     val_idx = split_idx["valid"] if not args.debug else split_idx["valid"][:16]
     test_idx = split_idx["test"] if not args.debug else split_idx["test"][:16]
 
-    return dataset[train_idx], dataset[val_idx], dataset[test_idx], None, None, sample_collator
+    train_set = dataset[train_idx]
+    val_set = dataset[val_idx]
+    test_set = dataset[test_idx]
+
+    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
+        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
+        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
+        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
+
+    return train_set, val_set, test_set, None, None, sample_collator
 
 
 def get_qm9(args, device):
@@ -264,6 +279,11 @@ def get_qm9(args, device):
     train_set = dataset[train_indices]
     val_set = dataset[val_indices]
     test_set = dataset[test_indices]
+
+    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
+        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
+        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
+        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
 
     if args.normalize_label:
         mean = dataset.data.y.mean(dim=0, keepdim=True)
@@ -306,8 +326,17 @@ def get_synthdata(args):
     train_sets, val_sets, test_sets = [], [], []
     for idx in range(10):
         train, val, test = separate_data(idx)
-        train_sets.append(dataset[train])
-        val_sets.append(dataset[val])
-        test_sets.append(dataset[test])
+        train_set = dataset[train]
+        val_set = dataset[val]
+        test_set = dataset[test]
+
+        if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
+            train_set = khop_data_process(train_set, args.sample_configs.sample_k)
+            val_set = khop_data_process(val_set, args.sample_configs.sample_k)
+            test_set = khop_data_process(test_set, args.sample_configs.sample_k)
+
+        train_sets.append(train_set)
+        val_sets.append(val_set)
+        test_sets.append(test_set)
 
     return train_sets, val_sets, test_sets, None, None, sample_collator

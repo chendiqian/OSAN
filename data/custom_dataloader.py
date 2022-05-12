@@ -4,9 +4,9 @@ import itertools
 import torch
 from torch.utils.data.dataloader import default_collate
 from torch_geometric.loader.dataloader import Collater
-from torch_geometric.data import Data, Dataset, HeteroData
+from torch_geometric.data import Data, Dataset, HeteroData, Batch
 
-from subgraph.construct import construct_subgraph_batch
+from data.data_utils import SubgraphSetBatch, get_ptr
 
 
 class SubgraphSetCollator:
@@ -25,11 +25,21 @@ class SubgraphSetCollator:
     def __call__(self, batch_list: List[List[Data]]):
         list_subgraphs = list(itertools.chain.from_iterable(batch_list))
 
-        return construct_subgraph_batch(list_subgraphs,
-                                        [len(g_list) for g_list in batch_list],
-                                        None,
-                                        None,
-                                        batch_list[0][0].x.device)
+        num_graphs = len(batch_list)
+        num_subgraphs = len(batch_list[0])
+        batch = Batch.from_data_list(list_subgraphs, None, None)
+        original_graph_mask = torch.repeat_interleave(torch.arange(num_graphs), num_subgraphs)
+        ptr = get_ptr(original_graph_mask)
+
+        return SubgraphSetBatch(x=batch.x,
+                                edge_index=batch.edge_index,
+                                edge_attr=batch.edge_attr,
+                                edge_weight=None,
+                                selected_node_masks=None,
+                                y=batch.y[ptr[:-1]],
+                                batch=batch.batch,
+                                inter_graph_idx=original_graph_mask,
+                                num_graphs=batch.num_graphs)
 
 
 class MYDataLoader(torch.utils.data.DataLoader):

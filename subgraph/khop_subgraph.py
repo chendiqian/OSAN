@@ -1,4 +1,3 @@
-import pdb
 from typing import Optional, Tuple
 
 import torch
@@ -157,16 +156,14 @@ def khop_global(graph: Data, weights: Optional[Tensor] = None) -> Tensor:
      of the incident edge weights
     :return: return node mask if not pruned, else edge mask
     """
-    khop_subgraph_idx = graph.khop_idx[:, :graph.num_nodes]
-    sampled_masks = torch.empty_like(weights, dtype=torch.float32, device=weights.device)
+    khop_subgraph_idx = graph.khop_idx[:, :graph.num_nodes]  # C x N
+    khop_subgraph_idx_dup = khop_subgraph_idx[..., None].repeat(1, 1, weights.shape[1])    # C x N x k
 
-    for i in range(weights.shape[1]):
-        weight = weights[:, i][None]
-        sum_of_weights = (weight * khop_subgraph_idx).sum(1)
-        idx = torch.argmax(sum_of_weights)
-        sampled_masks[:, i] = khop_subgraph_idx[idx, :]
+    sum_of_weights = (weights[None] * khop_subgraph_idx_dup).sum(1)  # 1 x N x k
+    idx = torch.argmax(sum_of_weights, 0)
 
-    return sampled_masks
+    mask = khop_subgraph_idx[idx, :].T
+    return mask
 
 
 def khop_global_dual(graph: Data, weights: Optional[Tensor]) -> Tensor:
@@ -178,15 +175,12 @@ def khop_global_dual(graph: Data, weights: Optional[Tensor]) -> Tensor:
     :return:
     """
     khop_subgraph_idx = graph.khop_idx[:, :graph.num_nodes]
-    sampled_masks = torch.empty_like(weights, dtype=torch.float32, device=weights.device)
+    khop_subgraph_idx_dup = khop_subgraph_idx[..., None].repeat(1, 1, weights.shape[1])
     max_idx = torch.argmax(weights, dim=0)
 
-    for i in range(weights.shape[1]):
-        weight = weights[:, i][None]
-        mean_of_weights = (weight * khop_subgraph_idx).sum(1) / khop_subgraph_idx.sum(1)
-        idx = torch.argmin(mean_of_weights)
-        sampled_masks[:, i] = 1 - khop_subgraph_idx[idx, :]
-        if sampled_masks[:, i].sum() == 0:   # never delete all the nodes
-            sampled_masks[max_idx[i], i] = 1.0
+    mean_of_weights = (weights[None] * khop_subgraph_idx_dup).sum(1) / khop_subgraph_idx_dup.sum(1)
+    idx = torch.argmin(mean_of_weights, dim=0)
+    mask = 1 - khop_subgraph_idx[idx, :].T
+    mask[max_idx, :] = 1.0  # never delete all the nodes
 
-    return sampled_masks
+    return mask

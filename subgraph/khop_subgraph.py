@@ -159,8 +159,8 @@ def khop_global(graph: Data, weights: Optional[Tensor] = None) -> Tensor:
     khop_subgraph_idx = graph.khop_idx[:, :graph.num_nodes]  # C x N
     khop_subgraph_idx_dup = khop_subgraph_idx[..., None].repeat(1, 1, weights.shape[1])    # C x N x k
 
-    sum_of_weights = (weights[None] * khop_subgraph_idx_dup).sum(1)  # 1 x N x k
-    idx = torch.argmax(sum_of_weights, 0)
+    mean_of_weights = (weights[None] * khop_subgraph_idx_dup).sum(1) / khop_subgraph_idx_dup.sum(1)
+    idx = torch.argmax(mean_of_weights, dim=0)
 
     mask = khop_subgraph_idx[idx, :].T
     return mask

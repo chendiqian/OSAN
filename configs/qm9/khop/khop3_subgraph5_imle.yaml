@@ -4,9 +4,9 @@ fixed:
   voting: 5
 
   sample_configs:
-    sample_policy: khop_global_dual
-    sample_k: 1
-    num_subgraphs: 3
+    sample_policy: khop_global
+    sample_k: 3
+    num_subgraphs: 5
     remove_node: False
     add_full_graph: True
     sample_with_esan: False

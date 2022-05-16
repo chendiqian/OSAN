@@ -1,6 +1,7 @@
 from .esan_zinc_model import ZincAtomEncoder, GNN, DSnetwork
 from .GINE_gnn import NetGINE
-from .GCN_embd import NetGCN
+from .GCN_embd import GCN_emb
+from .GIN_embd import GINE_embd
 from .GINE_alchemy import NetGINEAlchemy
 from .ogb_mol_gnn import OGBGNN
 from .GINE_qm9 import NetGINE_QM
@@ -49,7 +50,7 @@ def get_model(args):
                            args.hid_size,
                            args.num_convlayers,
                            DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
-    elif args.model.lower() == 'zincgin':   # ESAN's model
+    elif args.model.lower() == 'zincgin':  # ESAN's model
         subgraph_gnn = GNN(gnn_type=args.model, num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
                            num_layer=args.num_convlayers, in_dim=args.hid_size,
                            emb_dim=args.hid_size, drop_ratio=args.dropout, JK=args.jk,
@@ -63,12 +64,21 @@ def get_model(args):
         raise NotImplementedError
 
     if args.imle_configs is not None:
-        emb_model = NetGCN(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
-                           DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
-                           args.hid_size,
-                           args.sample_configs.num_subgraphs,
-                           normalize=args.imle_configs.norm_logits,
-                           encoder='ogb' in args.dataset.lower() or 'exp' in args.dataset.lower())
+        if 'embd_model' in args.imle_configs:
+            if args.imle_configs['embd_model'] == 'gin':
+                emb_model = GINE_embd(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                                      DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                                      args.hid_size,
+                                      num_class=args.sample_configs.num_subgraphs, )
+            else:
+                raise NotImplementedError
+        else:
+            emb_model = GCN_emb(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                                DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                                args.hid_size,
+                                args.sample_configs.num_subgraphs,
+                                normalize=args.imle_configs.norm_logits,
+                                encoder='ogb' in args.dataset.lower() or 'exp' in args.dataset.lower())
     else:
         emb_model = None
 

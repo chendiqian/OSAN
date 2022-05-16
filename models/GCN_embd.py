@@ -52,9 +52,9 @@ class GCNConv(MessagePassing):
             self.edge_updating.reset_parameters()
 
 
-class NetGCN(torch.nn.Module):
+class GCN_emb(torch.nn.Module):
     def __init__(self, input_dim, edge_features, hid_dim, emb_dim, normalize=False, encoder=False):
-        super(NetGCN, self).__init__()
+        super(GCN_emb, self).__init__()
 
         self.encoder = encoder
         if encoder:

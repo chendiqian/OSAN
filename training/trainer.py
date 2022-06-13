@@ -94,17 +94,27 @@ class Trainer:
         self.best_val_metric = None
         self.patience = 0
 
+#     def get_aux_loss(self, logits: torch.Tensor):
+#         """
+#         Aux loss that the sampled masks should be different
+
+#         :param logits:
+#         :return:
+#         """
+#         logits = logits / torch.linalg.norm(logits, ord=None, dim=0, keepdim=True)
+#         eye = 1 - torch.eye(logits.shape[1], device=logits.device)
+#         loss = ((logits.t() @ logits) * eye).mean()
+#         return loss * self.aux_loss_weight
+    
     def get_aux_loss(self, logits: torch.Tensor):
         """
-        Aux loss that the sampled masks should be different
-
-        :param logits:
-        :return:
+        A KL divergence version
         """
-        logits = logits / torch.linalg.norm(logits, ord=None, dim=0, keepdim=True)
-        eye = 1 - torch.eye(logits.shape[1], device=logits.device)
-        loss = ((logits.t() @ logits) * eye).mean()
+        log_softmax_logits = torch.nn.LogSoftmax(dim=0)(logits.sum(1))
+        kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+        loss = kl_loss(log_softmax_logits, torch.ones(logits.shape[0], dtype=torch.float32) / logits.shape[0])
         return loss * self.aux_loss_weight
+        
 
     def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool) \
             -> Tuple[Union[Data, Batch], Optional[torch.FloatType]]:

@@ -112,7 +112,8 @@ class Trainer:
         """
         log_softmax_logits = torch.nn.LogSoftmax(dim=0)(logits.sum(1))
         kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
-        loss = kl_loss(log_softmax_logits, torch.ones(logits.shape[0], dtype=torch.float32) / logits.shape[0])
+        target = torch.ones(logits.shape[0], dtype=torch.float32, device=logits.device) / logits.shape[0]
+        loss = kl_loss(log_softmax_logits, target)
         return loss * self.aux_loss_weight
         
 

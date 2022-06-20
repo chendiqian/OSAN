@@ -46,7 +46,11 @@ def naming(args) -> str:
     name += f'samplek_{args.sample_configs.sample_k}_'
     name += f'subg_{args.sample_configs.num_subgraphs}_'
     name += f'rm_node_{args.sample_configs.remove_node}_'
-    name += f'fullg_{args.sample_configs.add_full_graph}'
+    name += f'fullg_{args.sample_configs.add_full_graph}_'
+    try:
+        name += f'auxloss_{args.imle_configs.aux_loss_weight}'
+    except AttributeError:
+        pass
 
     return name
 

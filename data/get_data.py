@@ -78,13 +78,13 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[L
         os.mkdir(args.data_path)
 
     if 'ogb' in args.dataset.lower():
-        train_set, test_set, val_set, mean, std, sample_collator = get_ogb_data(args)
+        train_set, val_set, test_set, mean, std, sample_collator = get_ogb_data(args)
     elif args.dataset.lower() == 'qm9':
-        train_set, test_set, val_set, mean, std, sample_collator = get_qm9(args, device)
+        train_set, val_set, test_set, mean, std, sample_collator = get_qm9(args, device)
     elif args.dataset.lower() in ['exp', 'cexp']:
-        train_set, test_set, val_set, mean, std, sample_collator = get_synthdata(args)
+        train_set, val_set, test_set, mean, std, sample_collator = get_synthdata(args)
     elif args.dataset.lower() in ['zinc', 'alchemy']:
-        train_set, test_set, val_set, mean, std, sample_collator = get_TUdata(args, device)
+        train_set, val_set, test_set, mean, std, sample_collator = get_TUdata(args, device)
     else:
         raise ValueError
 

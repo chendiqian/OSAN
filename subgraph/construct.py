@@ -59,7 +59,7 @@ def edgemasked_graphs_from_nodemask(graphs: List[Data] = None,
         edge_weights = torch.cat((edge_weights,
                                   torch.ones(num_edges, dtype=edge_weights.dtype, device=edge_weights.device)), dim=0)
     if remove_node:
-        selected_node_masks = masks.reshape(-1)
+        selected_node_masks = masks.T.reshape(-1)
         if add_full_graph:
             selected_node_masks = torch.cat((selected_node_masks,
                                              torch.ones(num_nodes, dtype=masks.dtype, device=masks.device)),

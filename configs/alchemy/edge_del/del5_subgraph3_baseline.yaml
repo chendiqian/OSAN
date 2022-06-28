@@ -1,0 +1,14 @@
+fixed:
+  dataset: alchemy
+  log_path: './logs'
+  voting: 5
+
+  sample_configs:
+    sample_policy: edge
+    sample_k: -5
+    num_subgraphs: 3
+    remove_node: False
+    add_full_graph: True
+    sample_with_esan: False
+
+  imle_configs: null

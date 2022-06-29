@@ -106,10 +106,11 @@ class Trainer:
     #     loss = ((logits.t() @ logits) * eye).mean()
     #     return loss * self.aux_loss_weight
     
-    def get_aux_loss(self, logits: List[torch.Tensor]):
+    def get_aux_loss(self, logits: torch.Tensor, split_idx: torch.Tensor):
         """
         A KL divergence version
         """
+        logits = torch.split(logits, split_idx, dim=0)
         kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
         loss = 0.
         for logit in logits:
@@ -165,8 +166,7 @@ class Trainer:
 
             sample_idx = imle_sample_scheme(logits)
             if self.aux_loss_weight > 0:
-                aux_loss = self.get_aux_loss(sample_idx)
-                sample_idx = torch.cat(sample_idx, dim=0)
+                aux_loss = self.get_aux_loss(sample_idx, split_idx)
             self.noise_distribution.scale = self.noise_scale_scheduler()
         else:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
@@ -196,8 +196,7 @@ class Trainer:
 
         if emb_model is not None:
             emb_model.train()
-            # if aux loss, then need to split and calc aux loss for separate graphs
-            self.imle_scheduler.return_list = self.aux_loss_weight > 0.
+            self.imle_scheduler.return_list = False
             self.imle_scheduler.perturb = False
             self.imle_scheduler.sample_rand = self.imle_sample_rand
             optimizer_embd.zero_grad()

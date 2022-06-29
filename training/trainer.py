@@ -1,7 +1,7 @@
 import os
 import pickle
 from collections import defaultdict
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, List
 from ml_collections import ConfigDict
 
 import torch.linalg
@@ -94,28 +94,29 @@ class Trainer:
         self.best_val_metric = None
         self.patience = 0
 
-    def get_aux_loss(self, logits: torch.Tensor):
-        """
-        Aux loss that the sampled masks should be different
-
-        :param logits:
-        :return:
-        """
-        logits = logits / torch.linalg.norm(logits, ord=None, dim=0, keepdim=True)
-        eye = 1 - torch.eye(logits.shape[1], device=logits.device)
-        loss = ((logits.t() @ logits) * eye).mean()
-        return loss * self.aux_loss_weight
-    
     # def get_aux_loss(self, logits: torch.Tensor):
     #     """
-    #     A KL divergence version
+    #     Aux loss that the sampled masks should be different
+    #
+    #     :param logits:
+    #     :return:
     #     """
-    #     log_softmax_logits = torch.nn.LogSoftmax(dim=0)(logits.sum(1))
-    #     kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
-    #     target = torch.ones(logits.shape[0], dtype=torch.float32, device=logits.device) / logits.shape[0]
-    #     loss = kl_loss(log_softmax_logits, target)
+    #     logits = logits / torch.linalg.norm(logits, ord=None, dim=0, keepdim=True)
+    #     eye = 1 - torch.eye(logits.shape[1], device=logits.device)
+    #     loss = ((logits.t() @ logits) * eye).mean()
     #     return loss * self.aux_loss_weight
-        
+    
+    def get_aux_loss(self, logits: List[torch.Tensor]):
+        """
+        A KL divergence version
+        """
+        kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+        loss = 0.
+        for logit in logits:
+            log_softmax_logits = torch.nn.LogSoftmax(dim=0)(logit.sum(1))
+            target = torch.ones(logit.shape[0], dtype=torch.float32, device=logit.device) / logit.shape[0]
+            loss += kl_loss(log_softmax_logits, target)
+        return loss * self.aux_loss_weight
 
     def emb_model_forward(self, data: Union[Data, Batch], emb_model: Emb_model, train: bool) \
             -> Tuple[Union[Data, Batch], Optional[torch.FloatType]]:
@@ -165,6 +166,7 @@ class Trainer:
             sample_idx = imle_sample_scheme(logits)
             if self.aux_loss_weight > 0:
                 aux_loss = self.get_aux_loss(sample_idx)
+                sample_idx = torch.cat(sample_idx, dim=0)
             self.noise_distribution.scale = self.noise_scale_scheduler()
         else:
             sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
@@ -194,7 +196,8 @@ class Trainer:
 
         if emb_model is not None:
             emb_model.train()
-            self.imle_scheduler.return_list = False
+            # if aux loss, then need to split and calc aux loss for separate graphs
+            self.imle_scheduler.return_list = self.aux_loss_weight > 0.
             self.imle_scheduler.perturb = False
             self.imle_scheduler.sample_rand = self.imle_sample_rand
             optimizer_embd.zero_grad()

@@ -110,12 +110,14 @@ class Trainer:
         """
         A KL divergence version
         """
+        targets = torch.ones(logits.shape[0], device=logits.device, dtype=torch.float32)
         logits = torch.split(logits, split_idx, dim=0)
+        targets = torch.split(targets, split_idx, dim=0)
         kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
         loss = 0.
-        for logit in logits:
+        for logit, target in zip(logits, targets):
             log_softmax_logits = torch.nn.LogSoftmax(dim=0)(logit.sum(1))
-            target = torch.ones(logit.shape[0], dtype=torch.float32, device=logit.device) / logit.shape[0]
+            target = target / logit.shape[0]
             loss += kl_loss(log_softmax_logits, target)
         return loss * self.aux_loss_weight
 

@@ -113,7 +113,7 @@ class Trainer:
         targets = torch.ones(logits.shape[0], device=logits.device, dtype=torch.float32)
         logits = torch.split(logits, split_idx, dim=0)
         targets = torch.split(targets, split_idx, dim=0)
-        kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+        kl_loss = torch.nn.KLDivLoss(reduction="batchmean", log_target=False)
         loss = 0.
         for logit, target in zip(logits, targets):
             log_softmax_logits = torch.nn.LogSoftmax(dim=0)(logit.sum(1))

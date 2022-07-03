@@ -19,4 +19,4 @@ fixed:
     norm_logits: False
     noise_scale: 1.
     beta: 10.
-    aux_loss_weight: 1.
+    aux_loss_weight: 10.

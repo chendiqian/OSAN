@@ -6,9 +6,9 @@ fixed:
   sample_configs:
     sample_policy: node
     sample_k: -3
-    num_subgraphs: 1
+    num_subgraphs: 3
     remove_node: False
-    add_full_graph: False
+    add_full_graph: True
     sample_with_esan: False
 
   imle_configs:
@@ -19,4 +19,4 @@ fixed:
     norm_logits: False
     noise_scale: 1.
     beta: 10.
-    aux_loss_weight: 0.
+    aux_loss_weight: 0.1

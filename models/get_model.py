@@ -1,6 +1,7 @@
 from .esan_zinc_model import ZincAtomEncoder, GNN, DSnetwork
 from .GINE_gnn import NetGINE
 from .GCN_embd import GCN_emb
+from .GCN_edge_embd import GCN_edge_emb
 from .GIN_embd import GINE_embd
 from .GINE_alchemy import NetGINEAlchemy
 from .ogb_mol_gnn import OGBGNN
@@ -72,6 +73,13 @@ def get_model(args):
                                       num_class=args.sample_configs.num_subgraphs, )
             else:
                 raise NotImplementedError
+        elif args.sample_configs.sample_policy == 'edge_linegraph':
+            emb_model = GCN_edge_emb(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                                     DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                                     args.hid_size,
+                                     args.sample_configs.num_subgraphs,
+                                     normalize=args.imle_configs.norm_logits,
+                                     encoder='ogb' in args.dataset.lower() or 'exp' in args.dataset.lower())
         else:
             emb_model = GCN_emb(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                                 DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],

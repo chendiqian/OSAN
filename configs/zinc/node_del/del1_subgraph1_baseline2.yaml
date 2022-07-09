@@ -5,7 +5,7 @@ fixed:
 
   sample_configs:
     sample_policy: node
-    sample_k: -3
+    sample_k: -1
     num_subgraphs: 1
     remove_node: False
     add_full_graph: False

@@ -5,10 +5,10 @@ fixed:
 
   sample_configs:
     sample_policy: node
-    sample_k: -3
-    num_subgraphs: 1
+    sample_k: -1
+    num_subgraphs: 10
     remove_node: False
-    add_full_graph: False
+    add_full_graph: True
     sample_with_esan: False
 
   imle_configs: null

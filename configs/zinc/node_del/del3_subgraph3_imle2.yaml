@@ -5,7 +5,7 @@ fixed:
 
   sample_configs:
     sample_policy: node
-    sample_k: -1
+    sample_k: -3
     num_subgraphs: 3
     remove_node: False
     add_full_graph: True
@@ -19,4 +19,4 @@ fixed:
     norm_logits: False
     noise_scale: 1.
     beta: 10.
-    aux_loss_weight: 0.1
+    aux_loss_weight: 1.0

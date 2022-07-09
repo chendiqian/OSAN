@@ -102,6 +102,14 @@ class IMLEScheme:
                 mask = sample_heuristic(logit, self.sample_k)
             elif self.imle_sample_policy == 'edge':
                 mask = undirected_edge_sample(self.graphs[i].edge_index, logit, self.sample_k)
+            elif self.imle_sample_policy == 'edge_linegraph':
+                if self.sample_k < 0:
+                    k = logit.shape[0] + self.sample_k
+                    k = max(k, 0)
+                else:
+                    k = min(self.sample_k, logit.shape[0])
+                thresh = torch.topk(logit, k=k, dim=0, sorted=True).values[-1, :]  # kth largest
+                mask = (logit >= thresh[None]).to(torch.float)
             elif self.imle_sample_policy == 'khop_subgraph':
                 mask = khop_subgraphs(self.graphs[i], self.sample_k, instance_weight=logit)
             elif self.imle_sample_policy == 'khop_global':

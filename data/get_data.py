@@ -14,7 +14,7 @@ from sklearn.model_selection import StratifiedKFold
 from data.planarsatpairsdataset import PlanarSATPairsDataset
 from data.custom_dataloader import MYDataLoader
 from data.data_utils import AttributedDataLoader
-from data.data_preprocess import GraphToUndirected, GraphCoalesce, khop_data_process
+from data.data_preprocess import GraphToUndirected, GraphCoalesce, khop_data_process, AugmentwithLineGraph
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler, RawKhopDualSampler
 
@@ -37,6 +37,8 @@ def get_pretransform(args: Union[Namespace, ConfigDict]):
         if args.sample_configs.sample_policy in ['node', 'edge']:
             assert args.sample_configs.sample_k == -1, "ESAN supports remove one substance only"
         pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.sample_configs.remove_node)
+    elif args.imle_configs is not None and args.sample_configs.sample_policy == 'edge_linegraph':
+        pre_transform = AugmentwithLineGraph()
     else:
         pre_transform = lambda x: x  # no deck
     return pre_transform
@@ -188,6 +190,9 @@ def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice):
 
     dataset_func = TUDataset
     data_path = args.data_path
+    if args.sample_configs.sample_policy == 'edge_linegraph':
+        data_path = os.path.join(data_path, 'linegraph')
+
     transform, sample_collator = get_transform(args)
 
     dataset = dataset_func(data_path,

@@ -6,7 +6,7 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.utils import subgraph
 
 from data import SubgraphSetBatch
-from subgraph.grad_utils import Nodemask2Edgemask, nodemask2edgemask
+from subgraph.grad_utils import *
 
 
 def nodesubset_to_subgraph(graph: Data, subset: Tensor, relabel=False) -> Data:
@@ -70,10 +70,35 @@ def edgemasked_graphs_from_nodemask(graphs: List[Data] = None,
     return graphs, edge_weights, selected_node_masks
 
 
-def edgemasked_graphs_from_edgemask(graphs: List[Data] = None,
-                                    masks: Tensor = None,
-                                    add_full_graph: bool = False,
-                                    **kwargs) \
+def edgemasked_graphs_from_directed_edgemask(graphs: List[Data] = None,
+                                             edge_index: Tensor = None,
+                                             masks: Tensor = None,
+                                             grad: bool = True,
+                                             add_full_graph: bool = False, **kwargs) \
+        -> Tuple[List[Data], Tensor, Optional[Tensor]]:
+    """
+    Given masks of directed edge masks, get undirected ones as well as backprop
+    """
+    _, num_subgraphs = masks.shape
+    num_edges = edge_index.shape[1]
+
+    graphs = graphs * num_subgraphs if not add_full_graph else graphs * (num_subgraphs + 1)
+
+    transform_func = DirectedEdge2UndirectedEdge.apply if grad else directedge2undirectedge
+    edge_weights = transform_func(masks, edge_index)
+
+    edge_weights = edge_weights.reshape(-1)
+    if add_full_graph:
+        edge_weights = torch.cat((edge_weights,
+                                  torch.ones(num_edges, dtype=edge_weights.dtype, device=edge_weights.device)), dim=0)
+
+    return graphs, edge_weights, None
+
+
+def edgemasked_graphs_from_undirected_edgemask(graphs: List[Data] = None,
+                                               masks: Tensor = None,
+                                               add_full_graph: bool = False,
+                                               **kwargs) \
         -> Tuple[List[Data], Tensor, Optional[Tensor]]:
     """
     Create edge_weights which contain the back-propagated gradients

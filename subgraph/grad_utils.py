@@ -1,5 +1,6 @@
 import torch
 from torch_scatter import scatter
+from torch_geometric.utils import to_undirected
 
 
 class Nodemask2Edgemask(torch.autograd.Function):
@@ -37,3 +38,28 @@ def nodemask2edgemask(mask: torch.Tensor, edge_index: torch.Tensor, placeholder=
     """
     single = mask.ndim == 1
     return mask[edge_index[0]] * mask[edge_index[1]] if single else mask[:, edge_index[0]] * mask[:, edge_index[1]]
+
+
+class DirectedEdge2UndirectedEdge(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, mask, *args):
+        assert mask.dtype == torch.float  # must be differentiable
+        edge_index, = args
+        direct_mask = edge_index[0] < edge_index[1]
+        direct_edge_index = edge_index[:, direct_mask]
+        _, undirected_mask = to_undirected(direct_edge_index, mask)
+        ctx.save_for_backward(direct_mask)
+        return undirected_mask
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        direct_mask, = ctx.saved_tensors
+        final_grad = grad_output[direct_mask] + grad_output[torch.logical_not(direct_mask)]
+        return final_grad, None, None
+
+
+def directedge2undirectedge(mask, edge_index):
+    direct_mask = edge_index[0] < edge_index[1]
+    direct_edge_index = edge_index[:, direct_mask]
+    _, undirected_mask = to_undirected(direct_edge_index, mask)
+    return undirected_mask.T

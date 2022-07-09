@@ -13,7 +13,9 @@ from data.metrics import eval_rocauc, eval_acc
 from imle.noise import GumbelDistribution
 from imle.target import TargetDistribution
 from imle.wrapper import imle
-from subgraph.construct import (edgemasked_graphs_from_nodemask, edgemasked_graphs_from_edgemask,
+from subgraph.construct import (edgemasked_graphs_from_nodemask,
+                                edgemasked_graphs_from_undirected_edgemask,
+                                edgemasked_graphs_from_directed_edgemask,
                                 construct_subgraph_batch, )
 from training.imle_scheme import *
 
@@ -106,7 +108,7 @@ class Trainer:
     #     loss = ((logits.t() @ logits) * eye).mean()
     #     return loss * self.aux_loss_weight
     
-    def get_aux_loss(self, logits: torch.Tensor, split_idx: torch.Tensor):
+    def get_aux_loss(self, logits: torch.Tensor, split_idx: Tuple):
         """
         A KL divergence version
         """
@@ -147,7 +149,11 @@ class Trainer:
         elif self.imle_sample_policy in ['edge', 'mst']:
             split_idx = get_split_idx(data._slice_dict['edge_index'])
             logits = logits_e
-            subgraphs_from_mask = edgemasked_graphs_from_edgemask
+            subgraphs_from_mask = edgemasked_graphs_from_undirected_edgemask
+        elif self.imle_sample_policy == 'edge_linegraph':
+            split_idx = tuple(data.lin_num_nodes.cpu().tolist())
+            logits = logits_e
+            subgraphs_from_mask = edgemasked_graphs_from_directed_edgemask
         else:
             raise NotImplementedError
 

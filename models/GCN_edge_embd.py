@@ -78,18 +78,18 @@ class GCN_edge_emb(torch.nn.Module):
             self.layers.append(self.node_bn)
 
     def forward(self, data):
-        x, edge_attr = data.x, data.edge_attr
+        x, edge_attr, edge_index = data.lin_x, data.lin_edge_attr, data.lin_edge_index
 
         if self.encoder:
             x = self.atom_encoder(x)
             if edge_attr is not None:
                 edge_attr = self.bond_encoder(edge_attr)
 
-        x = self.conv1(x, data.edge_index, edge_attr)
+        x = self.conv1(x, edge_index, edge_attr)
         x = self.bn1(torch.relu(x))
-        x = self.conv2(x, data.edge_index, edge_attr)
+        x = self.conv2(x, edge_index, edge_attr)
         x = self.bn2(torch.relu(x))
-        x = self.conv3(x, data.edge_index, edge_attr)
+        x = self.conv3(x, edge_index, edge_attr)
         x = self.lin_node(self.bn3(torch.relu(x)))
         if self.normalize:
             x = self.node_bn(x)

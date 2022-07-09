@@ -49,11 +49,12 @@ class DirectedEdge2UndirectedEdge(torch.autograd.Function):
         direct_edge_index = edge_index[:, direct_mask]
         _, undirected_mask = to_undirected(direct_edge_index, mask)
         ctx.save_for_backward(direct_mask)
-        return undirected_mask
+        return undirected_mask.T
 
     @staticmethod
     def backward(ctx, grad_output):
         direct_mask, = ctx.saved_tensors
+        grad_output = grad_output.T
         final_grad = grad_output[direct_mask] + grad_output[torch.logical_not(direct_mask)]
         return final_grad, None, None
 

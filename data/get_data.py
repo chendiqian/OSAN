@@ -42,7 +42,7 @@ def get_pretransform(args: Union[Namespace, ConfigDict]):
     elif args.imle_configs is not None and args.sample_configs.sample_policy == 'edge_linegraph':
         pre_transform = AugmentwithLineGraph()
         postfix = 'linegraph'
-    elif args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
+    elif args.sample_configs.sample_policy is not None and 'khop' in args.sample_configs.sample_policy:
         pre_transform = AugmentwithKhopList(MAX_NUM_NODE_DICT[args.dataset.lower()], args.sample_configs.sample_k)
         postfix = f'khop{args.sample_configs.sample_k}'
     else:

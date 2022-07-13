@@ -12,8 +12,12 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.utils import to_undirected
 
 from subgraph.construct import nodesubset_to_subgraph
-from subgraph.sampling_baseline import node_rand_sampling, edge_rand_sampling, edge_sample_preproc, khop_subgraph_sampling, \
-    greedy_expand_sampling, max_spanning_tree_subgraph, khop_subgraph_sampling_dual
+from subgraph.sampling_baseline import (node_rand_sampling,
+                                        edge_rand_sampling, edge_sample_preproc,
+                                        khop_subgraph_sampling,
+                                        greedy_expand_sampling,
+                                        max_spanning_tree_subgraph,
+                                        khop_subgraph_sampling_dual, khop_subgraph_sampling_dual_fromcache)
 
 
 class SamplerOnTheFly:
@@ -72,11 +76,17 @@ class RawMSTSampler(SamplerOnTheFly):
 
 class RawKhopDualSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = khop_subgraph_sampling_dual(data,
-                                                self.n_subgraphs,
-                                                self.sample_k,
-                                                self.relabel,
-                                                self.add_full_graph)
+        if hasattr(data, 'khop_idx'):
+            subgraphs = khop_subgraph_sampling_dual_fromcache(data,
+                                                              self.n_subgraphs,
+                                                              self.relabel,
+                                                              self.add_full_graph)
+        else:
+            subgraphs = khop_subgraph_sampling_dual(data,
+                                                    self.n_subgraphs,
+                                                    self.sample_k,
+                                                    self.relabel,
+                                                    self.add_full_graph)
         return subgraphs
 
 
@@ -170,12 +180,12 @@ class EdgeDeleted(Graph2Subgraph):
                                                         num_nodes=data.num_nodes)
 
             subgraphs.append(Data(
-                    x=data.x,
-                    edge_index=subgraph_edge_index,
-                    edge_attr=subgraph_edge_attr,
-                    num_nodes=data.num_nodes,
-                    y=data.y,
-                ))
+                x=data.x,
+                edge_index=subgraph_edge_index,
+                edge_attr=subgraph_edge_attr,
+                num_nodes=data.num_nodes,
+                y=data.y,
+            ))
 
         return subgraphs
 

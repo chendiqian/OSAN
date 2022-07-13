@@ -4,9 +4,9 @@ fixed:
   voting: 5
 
   sample_configs:
-    sample_policy: node
+    sample_policy: edge
     sample_k: -10
-    num_subgraphs: 3
+    num_subgraphs: 10
     remove_node: False
     add_full_graph: True
     sample_with_esan: False
@@ -19,4 +19,4 @@ fixed:
     norm_logits: False
     noise_scale: 1.
     beta: 10.
-    aux_loss_weight: 10.
+    aux_loss_weight: 1.

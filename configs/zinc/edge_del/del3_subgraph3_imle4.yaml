@@ -4,8 +4,8 @@ fixed:
   voting: 5
 
   sample_configs:
-    sample_policy: node
-    sample_k: -10
+    sample_policy: edge_linegraph
+    sample_k: -3
     num_subgraphs: 3
     remove_node: False
     add_full_graph: True

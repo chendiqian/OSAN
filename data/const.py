@@ -13,6 +13,10 @@ DATASET_FEATURE_STAT_DICT = {
     'exp': {'node': 1, 'edge': 0, 'num_class': 1},  # bin classification
 }
 
+MAX_NUM_NODE_DICT = {
+    'zinc': 38,
+}
+
 TASK_TYPE_DICT = {
     'zinc': 'regression',
     'alchemy': 'regression',

@@ -11,10 +11,11 @@ from torch_geometric.transforms import Compose, Distance
 from ogb.graphproppred import PygGraphPropPredDataset
 from sklearn.model_selection import StratifiedKFold
 
+from data.const import MAX_NUM_NODE_DICT
 from data.planarsatpairsdataset import PlanarSATPairsDataset
 from data.custom_dataloader import MYDataLoader
 from data.data_utils import AttributedDataLoader
-from data.data_preprocess import GraphToUndirected, GraphCoalesce, khop_data_process, AugmentwithLineGraph
+from data.data_preprocess import GraphToUndirected, GraphCoalesce, AugmentwithLineGraph, AugmentwithKhopList
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler, RawKhopDualSampler
 
@@ -33,15 +34,20 @@ NAME_DICT = {'zinc': "ZINC_full",
 
 
 def get_pretransform(args: Union[Namespace, ConfigDict]):
+    postfix = None
     if args.imle_configs is None and args.sample_configs.sample_with_esan:
         if args.sample_configs.sample_policy in ['node', 'edge']:
             assert args.sample_configs.sample_k == -1, "ESAN supports remove one substance only"
         pre_transform = policy2transform(args.sample_configs.sample_policy, relabel=args.sample_configs.remove_node)
     elif args.imle_configs is not None and args.sample_configs.sample_policy == 'edge_linegraph':
         pre_transform = AugmentwithLineGraph()
+        postfix = 'linegraph'
+    elif args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
+        pre_transform = AugmentwithKhopList(MAX_NUM_NODE_DICT[args.dataset.lower()], args.sample_configs.sample_k)
+        postfix = 'khop'
     else:
         pre_transform = lambda x: x  # no deck
-    return pre_transform
+    return pre_transform, postfix
 
 
 def get_transform(args: Union[Namespace, ConfigDict]):
@@ -178,7 +184,7 @@ def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice):
         train_indices = train_indices[:16]
     train_indices = [int(i) for i in train_indices]
 
-    pre_transform = get_pretransform(args)
+    pre_transform, postfix = get_pretransform(args)
 
     if args.dataset.lower() == 'zinc':
         # for my version of PyG, ZINC is directed
@@ -190,8 +196,8 @@ def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice):
 
     dataset_func = TUDataset
     data_path = args.data_path
-    if args.sample_configs.sample_policy == 'edge_linegraph':
-        data_path = os.path.join(data_path, 'linegraph')
+    if postfix is not None:
+        data_path = os.path.join(data_path, postfix)
 
     transform, sample_collator = get_transform(args)
 
@@ -221,19 +227,16 @@ def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice):
         val_set = dataset[val_indices]
         test_set = dataset[test_indices]
 
-    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
-        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
-        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
-        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
-
     return train_set, val_set, test_set, mean, std, sample_collator
 
 
 def get_ogb_data(args: Union[Namespace, ConfigDict]):
-    pre_transform = get_pretransform(args)
+    pre_transform, postfix = get_pretransform(args)
     pre_transform = Compose([GraphCoalesce(), pre_transform])
 
     data_path = args.data_path
+    if postfix is not None:
+        data_path = os.path.join(data_path, postfix)
     transform, sample_collator = get_transform(args)
 
     dataset = PygGraphPropPredDataset(name=args.dataset,
@@ -250,11 +253,6 @@ def get_ogb_data(args: Union[Namespace, ConfigDict]):
     val_set = dataset[val_idx]
     test_set = dataset[test_idx]
 
-    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
-        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
-        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
-        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
-
     return train_set, val_set, test_set, None, None, sample_collator
 
 
@@ -270,10 +268,12 @@ def get_qm9(args, device):
         val_indices = val_indices[:16]
         test_indices = test_indices[:16]
 
-    pre_transform = get_pretransform(args)
+    pre_transform, postfix = get_pretransform(args)
     pre_transform = Compose([Distance(norm=False), pre_transform])
 
     data_path = os.path.join(args.data_path, 'QM9')
+    if postfix is not None:
+        data_path = os.path.join(data_path, postfix)
     transform, sample_collator = get_transform(args)
 
     dataset = QM9(data_path,
@@ -294,19 +294,16 @@ def get_qm9(args, device):
     else:
         mean, std = None, None
 
-    if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
-        train_set = khop_data_process(train_set, args.sample_configs.sample_k)
-        val_set = khop_data_process(val_set, args.sample_configs.sample_k)
-        test_set = khop_data_process(test_set, args.sample_configs.sample_k)
-
     return train_set, val_set, test_set, mean, std, sample_collator
 
 
 def get_synthdata(args):
-    pre_transform = get_pretransform(args)
+    pre_transform, postfix = get_pretransform(args)
     pre_transform = Compose([GraphToUndirected(), GraphCoalesce(), pre_transform])
 
     data_path = os.path.join(args.data_path, args.dataset.upper())
+    if postfix is not None:
+        data_path = os.path.join(data_path, postfix)
     transform, sample_collator = get_transform(args)
 
     dataset = PlanarSATPairsDataset(data_path,
@@ -334,11 +331,6 @@ def get_synthdata(args):
         train_set = dataset[train]
         val_set = dataset[val]
         test_set = dataset[test]
-
-        if args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
-            train_set = khop_data_process(train_set, args.sample_configs.sample_k)
-            val_set = khop_data_process(val_set, args.sample_configs.sample_k)
-            test_set = khop_data_process(test_set, args.sample_configs.sample_k)
 
         train_sets.append(train_set)
         val_sets.append(val_set)

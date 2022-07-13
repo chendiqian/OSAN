@@ -65,24 +65,6 @@ class AugmentwithLineGraph:
         return g
 
 
-def khop_data_process(dataset: InMemoryDataset, khop: int):
-    """
-    Add attribute of khop subgraph indices, so that during sampling they don't need to be re-calculcated.
-
-    :param dataset:
-    :param khop:
-    :return:
-    """
-    max_node = 0
-    for g in dataset:
-        max_node = max(max_node, g.num_nodes)
-
-    for i, g in zip(dataset._indices, dataset):
-        mask = parallel_khop_neighbor(g.edge_index.cpu().numpy(), g.num_nodes, max_node, khop)
-        dataset._data_list[i].khop_idx = torch.from_numpy(mask).to(torch.float32)
-    return dataset
-
-
 @numba.njit(cache=True)
 def graph2linegraph(node_attr: np.ndarray, edge_attr: np.ndarray, edge_index: np.ndarray) \
         -> Tuple[np.ndarray, List[np.ndarray], np.ndarray]:
@@ -107,3 +89,35 @@ def graph2linegraph(node_attr: np.ndarray, edge_attr: np.ndarray, edge_index: np
 
     # remove the first items
     return new_node_attr, new_edge_attr[1:], np.array(new_edge_index[1:]).T
+
+
+def khop_data_process(dataset: InMemoryDataset, khop: int):
+    """
+    Add attribute of khop subgraph indices, so that during sampling they don't need to be re-calculcated.
+
+    :param dataset:
+    :param khop:
+    :return:
+    """
+    max_node = 0
+    for g in dataset:
+        max_node = max(max_node, g.num_nodes)
+
+    for i, g in zip(dataset._indices, dataset):
+        mask = parallel_khop_neighbor(g.edge_index.cpu().numpy(), g.num_nodes, max_node, khop)
+        dataset._data_list[i].khop_idx = torch.from_numpy(mask).to(torch.float32)
+    return dataset
+
+
+class AugmentwithKhopList:
+    """
+    a class for the khop_data_process function
+    """
+    def __init__(self, max_num_node: int, khop: int):
+        self.max_num_node = max_num_node
+        self.khop = khop
+
+    def __call__(self, g: Data):
+        mask = parallel_khop_neighbor(g.edge_index.numpy(), g.num_nodes, self.max_num_node, self.khop)
+        g.khop_idx = torch.from_numpy(mask).to(torch.float32)
+        return g

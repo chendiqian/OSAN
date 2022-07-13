@@ -173,6 +173,31 @@ def khop_subgraph_sampling(data: Data,
     return graphs
 
 
+def khop_subgraph_sampling_fromcache(data: Data,
+                                     n_subgraphs: int,
+                                     relabel: bool = False,
+                                     add_full_graph: bool = False) -> List[Data]:
+    """
+    :param data:
+    :param n_subgraphs:
+    :param relabel:
+    :param add_full_graph:
+    :return:
+    """
+    khop_idx = data.khop_idx.numpy()
+    sample_indices = random.choices(range(data.num_nodes), k=n_subgraphs)
+    graphs = [Data(x=data.x,
+                   edge_index=data.edge_index,
+                   edge_attr=data.edge_attr,
+                   num_nodes=data.num_nodes,
+                   y=data.y)] if add_full_graph else []
+
+    for idx in sample_indices:
+        node_idx = np.where(khop_idx[idx])[0]
+        graphs.append(nodesubset_to_subgraph(data, torch.from_numpy(node_idx), relabel))
+    return graphs
+
+
 def khop_subgraph_sampling_dual(data: Data,
                                 n_subgraphs: int,
                                 khop: int = 3,
@@ -225,7 +250,7 @@ def khop_subgraph_sampling_dual_fromcache(data: Data,
     @param add_full_graph:
     @return:
     """
-    khop_idx = data.khop_idx[:, :data.num_nodes].numpy()
+    khop_idx = data.khop_idx.numpy()
     sample_indices = random.choices(range(data.num_nodes), k=n_subgraphs)
     graphs = [Data(x=data.x,
                    edge_index=data.edge_index,

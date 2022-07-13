@@ -14,7 +14,7 @@ from torch_geometric.utils import to_undirected
 from subgraph.construct import nodesubset_to_subgraph
 from subgraph.sampling_baseline import (node_rand_sampling,
                                         edge_rand_sampling, edge_sample_preproc,
-                                        khop_subgraph_sampling,
+                                        khop_subgraph_sampling, khop_subgraph_sampling_fromcache,
                                         greedy_expand_sampling,
                                         max_spanning_tree_subgraph,
                                         khop_subgraph_sampling_dual, khop_subgraph_sampling_dual_fromcache)
@@ -58,7 +58,17 @@ class RawEdgeSampler(SamplerOnTheFly):
 
 class RawKhopSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        subgraphs = khop_subgraph_sampling(data, self.n_subgraphs, self.sample_k, self.relabel, self.add_full_graph)
+        if hasattr(data, 'khop_idx') and data.khop_idx is not None:
+            subgraphs = khop_subgraph_sampling_fromcache(data,
+                                                         self.n_subgraphs,
+                                                         self.relabel,
+                                                         self.add_full_graph)
+        else:
+            subgraphs = khop_subgraph_sampling(data,
+                                               self.n_subgraphs,
+                                               self.sample_k,
+                                               self.relabel,
+                                               self.add_full_graph)
         return subgraphs
 
 
@@ -76,7 +86,7 @@ class RawMSTSampler(SamplerOnTheFly):
 
 class RawKhopDualSampler(SamplerOnTheFly):
     def __call__(self, data: Union[Data, Batch]) -> List[Data]:
-        if hasattr(data, 'khop_idx'):
+        if hasattr(data, 'khop_idx') and data.khop_idx is not None:
             subgraphs = khop_subgraph_sampling_dual_fromcache(data,
                                                               self.n_subgraphs,
                                                               self.relabel,

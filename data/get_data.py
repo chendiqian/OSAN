@@ -44,7 +44,7 @@ def get_pretransform(args: Union[Namespace, ConfigDict]):
         postfix = 'linegraph'
     elif args.sample_configs.sample_policy is not None and 'khop_global' in args.sample_configs.sample_policy:
         pre_transform = AugmentwithKhopList(MAX_NUM_NODE_DICT[args.dataset.lower()], args.sample_configs.sample_k)
-        postfix = 'khop'
+        postfix = f'khop{args.sample_configs.sample_k}'
     else:
         pre_transform = lambda x: x  # no deck
     return pre_transform, postfix

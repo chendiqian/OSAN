@@ -1,0 +1,22 @@
+fixed:
+  dataset: zinc
+  log_path: './logs'
+  voting: 5
+
+  sample_configs:
+    sample_policy: node
+    sample_k: -1
+    num_subgraphs: 3
+    remove_node: True
+    add_full_graph: True
+    sample_with_esan: False
+
+  imle_configs:
+    embd_lr: 1.e-3
+    reg_embd: 0.
+    imle_sample_rand: False
+    micro_batch_embd: 1
+    norm_logits: False
+    noise_scale: 1.
+    beta: 10.
+    aux_loss_weight: 0.

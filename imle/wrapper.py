@@ -96,7 +96,7 @@ def imle(function: Callable[[Tensor], Tensor] = None,
                 perturbed_input_2d_shape = perturbed_input_2d.shape
 
                 # [BATCH_SIZE * N_SAMPLES, ...]
-                perturbed_output = function(perturbed_input_2d)
+                perturbed_output, aux_output = function(perturbed_input_2d)
                 # [BATCH_SIZE, N_SAMPLES, ...]
                 perturbed_output = perturbed_output.view(perturbed_input_shape)
 
@@ -104,10 +104,10 @@ def imle(function: Callable[[Tensor], Tensor] = None,
 
                 # [BATCH_SIZE * N_SAMPLES, ...]
                 res = perturbed_output.view(perturbed_input_2d_shape)
-                return res
+                return res, aux_output
 
             @staticmethod
-            def backward(ctx, dy):
+            def backward(ctx, dy, *args):
                 # input: [BATCH_SIZE, ...]
                 # noise: [BATCH_SIZE, N_SAMPLES, ...]
                 # perturbed_output_3d: # [BATCH_SIZE, N_SAMPLES, ...]
@@ -138,7 +138,7 @@ def imle(function: Callable[[Tensor], Tensor] = None,
                 perturbed_target_input_2d = perturbed_target_input_3d.view(dy_shape)
 
                 # [BATCH_SIZE * N_SAMPLES, ...]
-                target_output_2d = function(perturbed_target_input_2d)
+                target_output_2d, *_ = function(perturbed_target_input_2d)
 
                 # [BATCH_SIZE, N_SAMPLES, ...]
                 target_output_3d = target_output_2d.view(noise_shape)

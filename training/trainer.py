@@ -16,6 +16,7 @@ from imle.wrapper import imle
 from subgraph.construct import (edgemasked_graphs_from_nodemask,
                                 edgemasked_graphs_from_undirected_edgemask,
                                 edgemasked_graphs_from_directed_edgemask,
+                                ordered_subgraph_construction,
                                 construct_subgraph_batch, )
 from training.imle_scheme import *
 
@@ -30,6 +31,7 @@ Loss = Union[torch.nn.modules.loss.MSELoss, torch.nn.modules.loss.L1Loss]
 
 class Trainer:
     def __init__(self,
+                 dataset: str,
                  task_type: str,
                  voting: int,
                  max_patience: int,
@@ -42,22 +44,9 @@ class Trainer:
                  remove_node: bool = True,
                  add_full_graph: bool = True,
                  **kwargs):
-        """
-
-        :param task_type:
-        :param voting:
-        :param max_patience:
-        :param criterion:
-        :param device:
-        :param imle_configs:
-        :param sample_policy:
-        :param sample_k:
-        :param remove_node:
-        :param add_full_graph:
-        :param kwargs:
-        """
         super(Trainer, self).__init__()
 
+        self.dataset = dataset
         self.task_type = task_type
         self.metric_comparator = IsBetter(self.task_type)
         self.voting = voting
@@ -107,7 +96,7 @@ class Trainer:
     #     eye = 1 - torch.eye(logits.shape[1], device=logits.device)
     #     loss = ((logits.t() @ logits) * eye).mean()
     #     return loss * self.aux_loss_weight
-    
+
     def get_aux_loss(self, logits: torch.Tensor, split_idx: Tuple):
         """
         A KL divergence version
@@ -136,6 +125,7 @@ class Trainer:
         logits_n, logits_e = emb_model(data)
 
         if self.imle_sample_policy in ['node',
+                                       'node_ordered',
                                        'node_heuristic',
                                        'khop_subgraph',
                                        'khop_global',
@@ -172,26 +162,37 @@ class Trainer:
             def imle_sample_scheme(logits: torch.Tensor):
                 return self.imle_scheduler.torch_sample_scheme(logits)
 
-            sample_idx = imle_sample_scheme(logits)
+            sample_idx, aux_output = imle_sample_scheme(logits)
             if self.aux_loss_weight > 0:
                 aux_loss = self.get_aux_loss(sample_idx, split_idx)
             self.noise_distribution.scale = self.noise_scale_scheduler()
         else:
-            sample_idx = self.imle_scheduler.torch_sample_scheme(logits)
+            sample_idx, aux_output = self.imle_scheduler.torch_sample_scheme(logits)
 
-        list_subgraphs, edge_weights, selected_node_masks = subgraphs_from_mask(graphs=graphs,
-                                                                                edge_index=data.edge_index,
-                                                                                masks=sample_idx,
-                                                                                grad=train,
-                                                                                remove_node=self.remove_node,
-                                                                                add_full_graph=self.add_full_graph)
-
-        data = construct_subgraph_batch(list_subgraphs,
-                                        len(graphs),
-                                        sample_idx.shape[-1] if not self.add_full_graph else sample_idx.shape[-1] + 1,
-                                        edge_weights,
-                                        selected_node_masks,
-                                        self.device)
+        if aux_output is None:
+            # unordered
+            list_subgraphs, edge_weights, selected_node_masks = subgraphs_from_mask(graphs=graphs,
+                                                                                    edge_index=data.edge_index,
+                                                                                    masks=sample_idx,
+                                                                                    grad=train,
+                                                                                    remove_node=self.remove_node,
+                                                                                    add_full_graph=self.add_full_graph)
+            data = construct_subgraph_batch(list_subgraphs,
+                                            len(graphs),
+                                            sample_idx.shape[-1] if not self.add_full_graph else sample_idx.shape[
+                                                                                                     -1] + 1,
+                                            edge_weights,
+                                            selected_node_masks,
+                                            self.device)
+        else:
+            # ordered
+            data = ordered_subgraph_construction(self.dataset,
+                                                 graphs,
+                                                 sample_idx,
+                                                 split_idx,
+                                                 aux_output,
+                                                 self.add_full_graph,
+                                                 train)
 
         return data, aux_loss
 
@@ -283,7 +284,7 @@ class Trainer:
         if emb_model is not None:
             emb_model.eval()
             self.imle_scheduler.return_list = False
-            self.imle_scheduler.perturb = self.voting > 1   # only perturb when voting more than once
+            self.imle_scheduler.perturb = self.voting > 1  # only perturb when voting more than once
             self.imle_scheduler.sample_rand = False  # test time, always take topk, inspite of noise perturbation
 
         model.eval()

@@ -80,6 +80,8 @@ class IMLEScheme:
 
     @torch.no_grad()
     def torch_sample_scheme(self, logits: torch.Tensor):
+        aux_output = []
+
         local_logits = logits.detach() if not self.sample_rand else \
             torch.randn(logits.shape, device=logits.device, dtype=logits.dtype)
         local_logits = torch.split(local_logits, self.ptr, dim=0)
@@ -100,6 +102,20 @@ class IMLEScheme:
                 mask = (logit >= thresh[None]).to(torch.float)
             elif self.imle_sample_policy == 'node_heuristic':
                 mask = sample_heuristic(logit, self.sample_k)
+            elif self.imle_sample_policy == 'node_ordered':
+                if self.sample_k < 0:
+                    k = logit.shape[0] + self.sample_k
+                    k = max(k, 1)
+                else:
+                    k = self.sample_k
+
+                mask = torch.zeros_like(logit, dtype=torch.float, device=logit.device)
+                sorted_idx = torch.sort(logit, dim=0).indices
+
+                r = sorted_idx[-k:, :].reshape(-1)
+                c = torch.arange(logit.shape[1]).repeat(k)
+                mask[r, c] = 1
+                aux_output.append(sorted_idx[-k:, :])
             elif self.imle_sample_policy == 'edge':
                 mask = undirected_edge_sample(self.graphs[i].edge_index, logit, self.sample_k)
             elif self.imle_sample_policy == 'edge_linegraph':
@@ -138,4 +154,5 @@ class IMLEScheme:
         if not self.return_list:
             sample_instance_idx = torch.cat(sample_instance_idx, dim=0)
             sample_instance_idx.requires_grad = False
-        return sample_instance_idx
+
+        return sample_instance_idx, aux_output if aux_output else None

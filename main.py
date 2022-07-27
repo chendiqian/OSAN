@@ -68,9 +68,9 @@ def run(fixed):
     if not ('no_default' in fixed and fixed['no_default']):
         with open(f"./configs/{fixed['dataset'].lower()}/common_configs.yaml", 'r') as stream:
             try:
-                common_configs = yaml.safe_load(stream)
-                common_configs = common_configs['common']
-                fixed.update(common_configs)
+                common_configs = yaml.safe_load(stream)['common']
+                default_configs = {k: v for k, v in common_configs.items() if k not in fixed}
+                fixed.update(default_configs)
             except yaml.YAMLError as exc:
                 print(exc)
 
@@ -99,7 +99,8 @@ def run(fixed):
     if emb_model is not None:
         emb_model.to(device)
 
-    trainer = Trainer(task_type=task_type,
+    trainer = Trainer(dataset=args.dataset.lower(),
+                      task_type=task_type,
                       voting=args.voting,
                       max_patience=args.patience,
                       criterion=criterion,

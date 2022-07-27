@@ -1,5 +1,3 @@
-import pdb
-
 import torch
 from torch.nn import Linear, ReLU
 from torch_geometric.nn import global_mean_pool, MessagePassing, global_add_pool
@@ -127,3 +125,31 @@ class NetGINE(torch.nn.Module):
         self.fc2.reset_parameters()
         self.fc3.reset_parameters()
         self.fc4.reset_parameters()
+
+
+class NetGINE_ordered(NetGINE):
+    def forward(self, data):
+        x, edge_index, edge_attr, edge_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight
+
+        intermediate_x = [] if self.jk == 'concat' else None
+        for i, (conv, bn) in enumerate(zip(self.conv, self.bn)):
+            x_new = conv(x, edge_index, edge_attr, edge_weight)
+            x_new = bn(x_new)
+            x_new = torch.relu(x_new)
+            x_new = torch.dropout(x_new, p=self.dropout, train=self.training)
+            x = residual(x, x_new) if self.jk == 'residual' else x_new
+            if intermediate_x is not None:
+                intermediate_x.append(x)
+
+        x = torch.cat(intermediate_x, dim=-1) if intermediate_x is not None else x
+        assert data.selected_node_masks.dtype == torch.float
+        x = x * data.selected_node_masks[:, None]
+
+        x = global_mean_pool(x, data.original_node_mask)
+
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        x = torch.relu(self.fc3(x))
+        x = global_mean_pool(x, data.inter_graph_idx)
+        x = self.fc4(x)
+        return x

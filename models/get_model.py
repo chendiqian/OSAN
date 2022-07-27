@@ -1,12 +1,12 @@
 from .esan_zinc_model import ZincAtomEncoder, GNN, DSnetwork
-from .GINE_gnn import NetGINE
+from .GINE_gnn import NetGINE, NetGINE_ordered
 from .GCN_embd import GCN_emb
 from .GCN_edge_embd import GCN_edge_emb
 from .GIN_embd import GINE_embd
 from .GINE_alchemy import NetGINEAlchemy
 from .ogb_mol_gnn import OGBGNN
 from .GINE_qm9 import NetGINE_QM
-from data.const import DATASET_FEATURE_STAT_DICT
+from data.const import DATASET_FEATURE_STAT_DICT, MAX_NUM_NODE_DICT
 
 
 def get_model(args):
@@ -18,6 +18,14 @@ def get_model(args):
                         args.num_convlayers,
                         jk=args.gnn_jk,
                         num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
+    elif args.model.lower() == 'gine_ordered_forward':
+        model = NetGINE_ordered(DATASET_FEATURE_STAT_DICT[args.dataset]['node'] + MAX_NUM_NODE_DICT[args.dataset],
+                                DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                                args.hid_size,
+                                args.dropout,
+                                args.num_convlayers,
+                                jk=args.gnn_jk,
+                                num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
     elif args.model.lower() == 'gine_alchemy':
         model = NetGINEAlchemy(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                                DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],

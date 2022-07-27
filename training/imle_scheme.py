@@ -124,6 +124,8 @@ class IMLEScheme:
                 if self.sample_k < 0:
                     k = logit.shape[0] + self.sample_k
                     k = max(k, 1)  # in case only 1 node
+                else:
+                    k = self.sample_k
                 mask = get_or_suboptim_subgraphs(logit, k)
             elif self.imle_sample_policy == 'or_optim':
                 mask = get_or_optim_subgraphs(self.graphs[i], logit, self.sample_k)

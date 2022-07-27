@@ -189,7 +189,6 @@ class Trainer:
             data = ordered_subgraph_construction(self.dataset,
                                                  graphs,
                                                  sample_idx,
-                                                 split_idx,
                                                  aux_output,
                                                  self.add_full_graph,
                                                  train)

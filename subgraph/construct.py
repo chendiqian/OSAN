@@ -13,19 +13,14 @@ from subgraph.grad_utils import *
 def ordered_subgraph_construction(dataset: str,
                                   graphs: List[Data],
                                   masks: Tensor,
-                                  split_idx: Tuple,
                                   sorted_indices: List[Tensor],
                                   add_full_graph: bool,
                                   grad: bool):
     """
-    each element in sorted_indices is like [[3, 5, 4,
-                                             1, 2, 4,
-                                             5, 1, 2,]] each col stores ordered max indices of scores
 
     @param dataset:
     @param graphs:
     @param masks:
-    @param split_idx:
     @param sorted_indices:
     @param add_full_graph:
     @param grad:
@@ -33,58 +28,37 @@ def ordered_subgraph_construction(dataset: str,
     """
     num_subgraphs = masks.shape[1]
     device = masks.device
-    ret_graphs = []
 
-    masks = CustomedIdentityMapping.apply(masks) if grad else masks
-    masks = torch.split(masks, split_idx, dim=0)
+    adjs = [edge_index2dense_adj(g.edge_index, g.num_nodes).to(torch.float) for g in graphs]
+    for g in graphs:
+        g.extra_feature = torch.zeros(g.num_nodes, MAX_NUM_NODE_DICT[dataset], device=device, dtype=torch.float)
 
-    selected_node_masks = []
-    original_node_mask = []
-    original_graph_mask = []
-    node_cnt = 0
+    ret_graphs = graphs * (num_subgraphs + int(add_full_graph))
 
-    for i, (graph, sorted_index, mask) in enumerate(zip(graphs, sorted_indices, masks)):
-        adj = edge_index2dense_adj(graph.edge_index, graph.num_nodes).to(torch.float)
-        extra_feature = torch.empty(graph.num_nodes, MAX_NUM_NODE_DICT[dataset],
-                                    device=device,
-                                    dtype=torch.float)
-        for k in range(num_subgraphs):
+    for k in range(num_subgraphs):
+        for i, (graph, sorted_index) in enumerate(zip(graphs, sorted_indices)):
             idx = sorted_index[:, k]
-            extra_feature.zero_()
-            extra_feature[idx, :idx.numel()] = adj[idx, :][:, idx]
-            ret_graphs.append(Data(x=torch.cat([graph.x, extra_feature], dim=-1),
-                                   edge_index=graph.edge_index,
-                                   edge_attr=graph.edge_attr,
-                                   num_nodes=graph.num_nodes,
-                                   y=graph.y))
-
-        selected_node_masks.append(mask.T.reshape(-1))
-
-        if add_full_graph:
-            extra_feature.zero_()
-            ret_graphs.append(Data(x=torch.cat([graph.x, extra_feature], dim=-1),
-                                   edge_index=graph.edge_index,
-                                   edge_attr=graph.edge_attr,
-                                   num_nodes=graph.num_nodes,
-                                   y=graph.y))
-            selected_node_masks.append(torch.ones(graph.num_nodes, device=device, dtype=mask.dtype))
-
-        original_node_mask.append(torch.arange(node_cnt, node_cnt + graph.num_nodes, device=device) \
-                                  .repeat(num_subgraphs + int(add_full_graph)))
-        original_graph_mask.append(torch.ones(graph.num_nodes, device=device, dtype=torch.int64) * i)
-        node_cnt += graph.num_nodes
+            ret_graphs[k * len(graphs) + i].extra_feature[idx, :idx.numel()] = adjs[i][idx, :][:, idx]
 
     batch = Batch.from_data_list(ret_graphs, None, None)
-    original_graph_mask = torch.cat(original_graph_mask, dim=0)
-    original_node_mask = torch.cat(original_node_mask, dim=0)
-    selected_node_masks = torch.cat(selected_node_masks, dim=0)
+    original_graph_mask = torch.repeat_interleave(torch.arange(len(graphs)),
+                                                  torch.tensor([g.num_nodes for g in graphs]), dim=0).to(device)
+    original_node_mask = torch.arange(sum([g.num_nodes for g in graphs]), device=device)\
+        .repeat(num_subgraphs + int(add_full_graph))
+    selected_node_masks = CustomedIdentityMapping.apply(masks) if grad else masks
+    if add_full_graph:
+        selected_node_masks = torch.cat([selected_node_masks,
+                                         torch.ones(selected_node_masks.shape[0], 1,
+                                                    dtype=selected_node_masks.dtype,
+                                                    device=device)], dim=-1)
+    selected_node_masks = selected_node_masks.T.reshape(-1)
 
     return SubgraphSetBatch(x=batch.x,
+                            extra_feature=batch.extra_feature,
                             edge_index=batch.edge_index,
                             edge_attr=batch.edge_attr,
-                            edge_weight=None,
                             selected_node_masks=selected_node_masks,
-                            y=torch.cat([graph.y for graph in graphs], dim=0),
+                            y=batch.y[:len(graphs)],
                             inter_graph_idx=original_graph_mask,
                             original_node_mask=original_node_mask,
                             num_graphs=batch.num_graphs)

@@ -129,11 +129,13 @@ class NetGINE(torch.nn.Module):
 
 class NetGINE_ordered(NetGINE):
     def forward(self, data):
-        x, edge_index, edge_attr, edge_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
+        extra_feature = data.extra_feature
+        x = torch.cat([x, extra_feature], dim=-1)
 
         intermediate_x = [] if self.jk == 'concat' else None
         for i, (conv, bn) in enumerate(zip(self.conv, self.bn)):
-            x_new = conv(x, edge_index, edge_attr, edge_weight)
+            x_new = conv(x, edge_index, edge_attr, None)
             x_new = bn(x_new)
             x_new = torch.relu(x_new)
             x_new = torch.dropout(x_new, p=self.dropout, train=self.training)

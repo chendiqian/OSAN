@@ -68,7 +68,7 @@ class PNANet(torch.nn.Module):
         for _ in range(num_layer):
             conv = MyPNAConv(in_channels=hidden_dim, out_channels=hidden_dim,
                              aggregators=aggregators, scalers=scalers, deg=deg,
-                             edge_dim=edge_dim, towers=5, pre_layers=1, post_layers=1,
+                             edge_dim=edge_dim, towers=4, pre_layers=1, post_layers=1,
                              divide_input=False)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(hidden_dim))

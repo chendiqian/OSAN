@@ -48,13 +48,21 @@ class PNANet(torch.nn.Module):
 
         max_degree = -1
         for data in train_dataset:
-            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+            if isinstance(data, list):
+                g = data[0]
+            else:
+                g = data
+            d = degree(g.edge_index[1], num_nodes=g.num_nodes, dtype=torch.long)
             max_degree = max(max_degree, int(d.max()))
 
         # Compute the in-degree histogram tensor
         deg = torch.zeros(max_degree + 1, dtype=torch.long)
         for data in train_dataset:
-            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+            if isinstance(data, list):
+                g = data[0]
+            else:
+                g = data
+            d = degree(g.edge_index[1], num_nodes=g.num_nodes, dtype=torch.long)
             deg += torch.bincount(d, minlength=deg.numel())
 
         self.node_emb = Linear(input_dims, hidden_dim)

@@ -191,6 +191,7 @@ class Trainer:
                                                  sample_idx,
                                                  aux_output,
                                                  self.add_full_graph,
+                                                 self.remove_node,
                                                  train)
 
         return data, aux_loss

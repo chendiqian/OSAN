@@ -3,7 +3,7 @@ from torch_scatter import scatter
 from torch_geometric.utils import to_undirected
 
 
-class CustomedIdentityMapping(torch.autograd.Function):
+class IdentityMapping(torch.autograd.Function):
     @staticmethod
     def forward(ctx, mask):
         """
@@ -15,6 +15,24 @@ class CustomedIdentityMapping(torch.autograd.Function):
         """
         assert mask.dtype == torch.float  # must be differentiable
         return mask
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output
+
+
+class CustomedIdentityMapping(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, mask):
+        """
+        Given node mask, return identity, direct grad on the mask
+
+        :param ctx:
+        :param mask:
+        :return:
+        """
+        assert mask.dtype == torch.float  # must be differentiable
+        return torch.ones_like(mask, device=mask.device, dtype=mask.dtype)
 
     @staticmethod
     def backward(ctx, grad_output):

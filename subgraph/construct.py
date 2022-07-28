@@ -14,6 +14,7 @@ def ordered_subgraph_construction(dataset: str,
                                   masks: Tensor,
                                   sorted_indices: List[Tensor],
                                   add_full_graph: bool,
+                                  remove_node: bool,
                                   grad: bool):
     """
 
@@ -22,6 +23,7 @@ def ordered_subgraph_construction(dataset: str,
     @param masks:
     @param sorted_indices:
     @param add_full_graph:
+    @param remove_node:
     @param grad:
     @return:
     """
@@ -43,7 +45,18 @@ def ordered_subgraph_construction(dataset: str,
                                                   torch.tensor([g.num_nodes for g in graphs]), dim=0).to(device)
     original_node_mask = torch.arange(sum([g.num_nodes for g in graphs]), device=device)\
         .repeat(num_subgraphs + int(add_full_graph))
-    selected_node_masks = CustomedIdentityMapping.apply(masks) if grad else masks
+
+    if grad:
+        if remove_node:
+            selected_node_masks = IdentityMapping.apply(masks)
+        else:
+            selected_node_masks = CustomedIdentityMapping.apply(masks)
+    else:
+        if remove_node:
+            selected_node_masks = masks
+        else:
+            selected_node_masks = torch.ones_like(masks, device=masks.device, dtype=masks.dtype)
+
     if add_full_graph:
         selected_node_masks = torch.cat([selected_node_masks,
                                          torch.ones(selected_node_masks.shape[0], 1,

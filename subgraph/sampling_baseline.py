@@ -8,7 +8,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils import is_undirected, to_undirected
 
 from subgraph.construct import nodesubset_to_subgraph
-from subgraph.mst_subgraph import kruskal_max_span_tree
+from subgraph.mst_subgraph import numba_kruskal
 from subgraph.greedy_expanding_tree import numba_greedy_expand_tree
 from subgraph.khop_subgraph import numba_k_hop_subgraph
 
@@ -283,9 +283,20 @@ def max_spanning_tree_subgraph(data: Data, n_subgraphs: int, add_full_graph: boo
                    edge_attr=data.edge_attr,
                    num_nodes=data.num_nodes,
                    y=data.y)] if add_full_graph else []
+
+    if not data.num_edges:
+        graphs += [Data(x=data.x,
+                   edge_index=data.edge_index,
+                   edge_attr=data.edge_attr,
+                   num_nodes=data.num_nodes,
+                   y=data.y)] * n_subgraphs
+        return graphs
+
     np_edge_index = data.edge_index.cpu().numpy().T
     for i in range(n_subgraphs):
-        edge_mask = kruskal_max_span_tree(np_edge_index, None, data.num_nodes)
+        sort_index = np.random.permutation(np_edge_index.shape[0])
+        edge_mask = numba_kruskal(sort_index, np_edge_index, data.num_nodes)
+        edge_mask = torch.from_numpy(edge_mask)
         graphs.append(Data(x=data.x,
                            edge_index=data.edge_index[:, edge_mask],
                            edge_attr=data.edge_attr[edge_mask] if data.edge_attr is not None else None,

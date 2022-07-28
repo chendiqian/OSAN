@@ -221,15 +221,15 @@ def mst_subgraph_sampling(graph: Data, edge_weight: Tensor) -> Tensor:
     :param edge_weight: shape (E, n_subgraphs)
     :return:
     """
+    device = graph.edge_index.device
     edge_masks = []
     n_subgraphs = edge_weight.shape[1]
+    sort_idx = torch.argsort(edge_weight, dim=0, descending=True).cpu().numpy()
 
     np_edge_index = graph.edge_index.cpu().numpy().T
     for i in range(n_subgraphs):
-        edge_mask = kruskal_max_span_tree(np_edge_index,
-                                          edge_weight[:, i],
-                                          graph.num_nodes,
-                                          device=graph.edge_index.device)
+        edge_mask = numba_kruskal(sort_idx[:, i], np_edge_index, graph.num_nodes)
+        edge_mask = torch.from_numpy(edge_mask).to(device)
         edge_masks.append(edge_mask)
 
     return torch.vstack(edge_masks).to(torch.float32)

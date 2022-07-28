@@ -5,7 +5,6 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.utils import subgraph
 
 from data import SubgraphSetBatch
-from data.data_utils import edge_index2dense_adj
 from data.const import MAX_NUM_NODE_DICT
 from subgraph.grad_utils import *
 
@@ -29,7 +28,6 @@ def ordered_subgraph_construction(dataset: str,
     num_subgraphs = masks.shape[1]
     device = masks.device
 
-    adjs = [edge_index2dense_adj(g.edge_index, g.num_nodes).to(torch.float) for g in graphs]
     for g in graphs:
         g.extra_feature = torch.zeros(g.num_nodes, MAX_NUM_NODE_DICT[dataset], device=device, dtype=torch.float)
 
@@ -38,7 +36,7 @@ def ordered_subgraph_construction(dataset: str,
     for k in range(num_subgraphs):
         for i, (graph, sorted_index) in enumerate(zip(graphs, sorted_indices)):
             idx = sorted_index[:, k]
-            ret_graphs[k * len(graphs) + i].extra_feature[idx, :idx.numel()] = adjs[i][idx, :][:, idx]
+            ret_graphs[k * len(graphs) + i].extra_feature[idx, :idx.numel()] = graph.adj[idx, :][:, idx]
 
     batch = Batch.from_data_list(ret_graphs, None, None)
     original_graph_mask = torch.repeat_interleave(torch.arange(len(graphs)),

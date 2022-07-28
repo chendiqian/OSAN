@@ -15,7 +15,7 @@ from data.const import MAX_NUM_NODE_DICT
 from data.planarsatpairsdataset import PlanarSATPairsDataset
 from data.custom_dataloader import MYDataLoader
 from data.data_utils import AttributedDataLoader
-from data.data_preprocess import GraphToUndirected, GraphCoalesce, AugmentwithLineGraph, AugmentwithKhopList
+from data.data_preprocess import GraphToUndirected, GraphCoalesce, AugmentwithLineGraph, AugmentwithKhopList, AugmentwithAdj
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler, RawKhopDualSampler
 
@@ -45,6 +45,9 @@ def get_pretransform(args: Union[Namespace, ConfigDict]):
     elif args.sample_configs.sample_policy is not None and 'khop' in args.sample_configs.sample_policy:
         pre_transform = AugmentwithKhopList(MAX_NUM_NODE_DICT[args.dataset.lower()], args.sample_configs.sample_k)
         postfix = f'khop{args.sample_configs.sample_k}'
+    elif args.imle_configs is not None and args.sample_configs.sample_policy == 'node_ordered':
+        pre_transform = AugmentwithAdj()
+        postfix = 'withAdj'
     else:
         pre_transform = lambda x: x  # no deck
     return pre_transform, postfix

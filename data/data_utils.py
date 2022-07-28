@@ -168,16 +168,17 @@ class SyncMeanTimer:
             return self.last_end_time
 
 
-def edge_index2dense_adj(edge_index: Tensor, num_nodes: Optional[int] = None):
+def edge_index2dense_adj(edge_index: Tensor, num_nodes: Optional[int] = None, default_dtype: torch.dtype = torch.int):
     """
 
     @param edge_index:
     @param num_nodes:
+    @param default_dtype:
     @return:
     """
     if num_nodes is None:
         num_nodes = edge_index.max()
 
-    adj = torch.zeros(num_nodes, num_nodes, dtype=torch.int, device=edge_index.device)
+    adj = torch.zeros(num_nodes, num_nodes, device=edge_index.device, dtype=default_dtype)
     adj[edge_index[0], edge_index[1]] = 1
     return adj

@@ -5,6 +5,7 @@ import numba
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.utils import to_undirected, coalesce
 
+from data.data_utils import edge_index2dense_adj
 from subgraph.khop_subgraph import parallel_khop_neighbor
 
 
@@ -120,4 +121,15 @@ class AugmentwithKhopList:
     def __call__(self, g: Data):
         mask = parallel_khop_neighbor(g.edge_index.numpy(), g.num_nodes, self.max_num_node, self.khop)
         g.khop_idx = torch.from_numpy(mask).to(torch.float32)
+        return g
+
+
+class AugmentwithAdj:
+
+    def __init__(self):
+        pass
+
+    def __call__(self, g: Data):
+        adj = edge_index2dense_adj(g.edge_index, g.num_nodes, default_dtype=torch.float)
+        g.adj = adj
         return g

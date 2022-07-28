@@ -133,7 +133,7 @@ class IMLEScheme:
             elif self.imle_sample_policy == 'khop_global_dual':
                 mask = khop_global_dual(self.graphs[i], logit)
             elif self.imle_sample_policy == 'mst':
-                mask = mst_subgraph_sampling(self.graphs[i], logit).T
+                mask = mst_subgraph_sampling(self.graphs[i], logit)
             elif self.imle_sample_policy == 'greedy_exp':
                 mask = greedy_expand_tree(self.graphs[i], logit, self.sample_k).T
             elif self.imle_sample_policy == 'or':

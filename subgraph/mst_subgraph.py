@@ -54,6 +54,10 @@ def mst_subgraph_sampling(graph: Data, edge_weight: Tensor) -> Tensor:
     :return:
     """
     device = graph.edge_index.device
+
+    if not edge_weight.shape[0]:
+        return torch.ones_like(edge_weight, device=device, dtype=torch.float)
+
     edge_masks = []
     n_subgraphs = edge_weight.shape[1]
     sort_idx = torch.argsort(edge_weight, dim=0, descending=True).cpu().numpy()
@@ -64,4 +68,4 @@ def mst_subgraph_sampling(graph: Data, edge_weight: Tensor) -> Tensor:
         edge_mask = torch.from_numpy(edge_mask).to(device)
         edge_masks.append(edge_mask)
 
-    return torch.vstack(edge_masks).to(torch.float32)
+    return torch.vstack(edge_masks).to(torch.float32).T

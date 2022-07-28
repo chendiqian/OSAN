@@ -46,7 +46,7 @@ def get_pretransform(args: Union[Namespace, ConfigDict]):
         pre_transform = AugmentwithKhopList(MAX_NUM_NODE_DICT[args.dataset.lower()], args.sample_configs.sample_k)
         postfix = f'khop{args.sample_configs.sample_k}'
     elif args.imle_configs is not None and args.sample_configs.sample_policy == 'node_ordered':
-        pre_transform = AugmentwithAdj()
+        pre_transform = AugmentwithAdj(MAX_NUM_NODE_DICT[args.dataset.lower()])
         postfix = 'withAdj'
     else:
         pre_transform = lambda x: x  # no deck

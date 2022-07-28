@@ -126,10 +126,13 @@ class AugmentwithKhopList:
 
 class AugmentwithAdj:
 
-    def __init__(self):
-        pass
+    def __init__(self, max_num_node: int):
+        self.max_num_node = max_num_node
 
     def __call__(self, g: Data):
-        adj = edge_index2dense_adj(g.edge_index, g.num_nodes, default_dtype=torch.float)
+        adj = edge_index2dense_adj(g.edge_index,
+                                   num_nodes=g.num_nodes,
+                                   max_nodes=self.max_num_node,
+                                   default_dtype=torch.float)
         g.adj = adj
         return g

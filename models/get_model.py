@@ -6,10 +6,11 @@ from .GIN_embd import GINE_embd
 from .GINE_alchemy import NetGINEAlchemy
 from .ogb_mol_gnn import OGBGNN
 from .GINE_qm9 import NetGINE_QM
+from .pna import PNANet
 from data.const import DATASET_FEATURE_STAT_DICT, MAX_NUM_NODE_DICT
 
 
-def get_model(args):
+def get_model(args, train_set):
     if args.model.lower() == 'gine':
         model = NetGINE(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                         DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
@@ -69,6 +70,14 @@ def get_model(args):
                           channels=args.channels,
                           num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
                           invariant=args.dataset.lower() == 'zinc')
+    elif args.model.lower() == 'pna':
+        model = PNANet(train_set,
+                       DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                       DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                       args.hid_size,
+                       args.edge_hid_size,
+                       args.num_convlayers,
+                       DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
     else:
         raise NotImplementedError
 

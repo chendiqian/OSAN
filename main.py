@@ -89,12 +89,12 @@ def run(fixed):
     logger = get_logger(folder_name)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    train_loaders, val_loaders, test_loaders = get_data(args, device)
+    train_loaders, val_loaders, test_loaders, train_set = get_data(args, device)
 
     task_type = TASK_TYPE_DICT[args.dataset.lower()]
     criterion = CRITERION_DICT[args.dataset.lower()]
 
-    model, emb_model = get_model(args)
+    model, emb_model = get_model(args, train_set)
     model = model.to(device)
     if emb_model is not None:
         emb_model.to(device)

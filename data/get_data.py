@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, Any
 from argparse import Namespace
 from ml_collections import ConfigDict
 
@@ -77,7 +77,8 @@ def get_transform(args: Union[Namespace, ConfigDict]):
 
 def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[List[AttributedDataLoader],
                                                                                List[AttributedDataLoader],
-                                                                               List[AttributedDataLoader]]:
+                                                                               List[AttributedDataLoader],
+                                                                               Any]:
     """
     Distributor function
 
@@ -156,7 +157,7 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[L
     else:
         raise TypeError
 
-    return train_loaders, val_loaders, test_loaders
+    return train_loaders, val_loaders, test_loaders, train_set
 
 
 def get_TUdata(args: Union[Namespace, ConfigDict], device: torchdevice):

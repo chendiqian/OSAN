@@ -15,6 +15,7 @@ DATASET_FEATURE_STAT_DICT = {
 
 MAX_NUM_NODE_DICT = {
     'zinc': 38,
+    'ogbg-molesol': 55,
 }
 
 TASK_TYPE_DICT = {

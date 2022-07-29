@@ -1,5 +1,6 @@
 # credits to OGB team
 # https://github.com/snap-stanford/ogb/blob/master/examples/graphproppred/mol/conv.py
+import pdb
 
 import torch
 from torch_geometric.nn import MessagePassing
@@ -175,7 +176,7 @@ class GNN_node(torch.nn.Module):
             self.batch_norms.append(torch.nn.BatchNorm1d(emb_dim))
 
     def forward(self, data):
-        x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         edge_weight = data.edge_weight
 
         h_list = [self.atom_encoder(x)]
@@ -209,6 +210,101 @@ class GNN_node(torch.nn.Module):
 
     def reset_parameters(self):
         self.atom_encoder.reset_parameters()
+        for c in self.convs:
+            c.reset_parameters()
+        for b in self.batch_norms:
+            b.reset_parameters()
+
+
+class GNN_node_order(torch.nn.Module):
+    """
+    Output:
+        node representations
+    """
+
+    def __init__(self,
+                 num_layer,
+                 emb_dim,
+                 extra_in_dim,
+                 extra_encode_dim,
+                 drop_ratio=0.5,
+                 JK="last",
+                 residual=False,
+                 gnn_type='gin'):
+        """
+            emb_dim (int): node embedding dimensionality
+            num_layer (int): number of GNN message passing layers
+        """
+
+        super(GNN_node_order, self).__init__()
+        self.num_layer = num_layer
+        self.drop_ratio = drop_ratio
+        self.JK = JK
+        # add residual connection or not
+        self.residual = residual
+
+        if self.num_layer < 2:
+            raise ValueError("Number of GNN layers must be greater than 1.")
+
+        self.atom_encoder = AtomEncoder(emb_dim)
+        self.extra_encoder = torch.nn.Linear(extra_in_dim, extra_encode_dim)
+        self.unify_layer = torch.nn.Linear(emb_dim + extra_encode_dim, emb_dim)
+
+        # List of GNNs
+        self.convs = torch.nn.ModuleList()
+        self.batch_norms = torch.nn.ModuleList()
+
+        for layer in range(num_layer):
+            if gnn_type == 'gin':
+                self.convs.append(GINConv(emb_dim))
+            elif gnn_type == 'gcn':
+                self.convs.append(GCNConv(emb_dim))
+            elif gnn_type == 'originalgin':
+                self.convs.append(OriginalGINConv(emb_dim))
+            else:
+                raise ValueError('Undefined GNN type called {}'.format(gnn_type))
+
+            self.batch_norms.append(torch.nn.BatchNorm1d(emb_dim))
+
+    def forward(self, data):
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
+        extra_feature = data.extra_feature
+        x = torch.cat([self.atom_encoder(x), F.relu(self.extra_encoder(extra_feature))], dim=-1)
+        x = F.relu(self.unify_layer(x))
+
+        h_list = [x]
+        for layer in range(self.num_layer):
+
+            h = self.convs[layer](h_list[layer], edge_index, edge_attr, None)
+            h = self.batch_norms[layer](h)
+
+            if layer == self.num_layer - 1:
+                # remove relu for the last layer
+                h = F.dropout(h, self.drop_ratio, training=self.training)
+            else:
+                h = F.dropout(F.relu(h), self.drop_ratio, training=self.training)
+
+            if self.residual:
+                h += h_list[layer]
+
+            h_list.append(h)
+
+        # Different implementations of Jk-concat
+        if self.JK == "last":
+            node_representation = h_list[-1]
+        elif self.JK == "sum":
+            node_representation = 0
+            for layer in range(self.num_layer + 1):
+                node_representation += h_list[layer]
+        else:
+            raise ValueError
+
+        return node_representation
+
+    def reset_parameters(self):
+        self.atom_encoder.reset_parameters()
+        self.extra_encoder.reset_parameters()
+        self.unify_layer.reset_parameters()
         for c in self.convs:
             c.reset_parameters()
         for b in self.batch_norms:

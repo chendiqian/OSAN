@@ -4,7 +4,7 @@ from .GCN_embd import GCN_emb
 from .GCN_edge_embd import GCN_edge_emb
 from .GIN_embd import GINE_embd
 from .GINE_alchemy import NetGINEAlchemy
-from .ogb_mol_gnn import OGBGNN
+from .ogb_mol_gnn import OGBGNN, OGBGNN_order
 from .GINE_qm9 import NetGINE_QM
 from .pna import PNANet
 from data.const import DATASET_FEATURE_STAT_DICT, MAX_NUM_NODE_DICT
@@ -27,6 +27,16 @@ def get_model(args, train_set):
                                 args.num_convlayers,
                                 jk=args.gnn_jk,
                                 num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
+    elif args.model.lower() == 'ogb_gin_ordered':
+        model = OGBGNN_order(gnn_type='gin',
+                             num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
+                             num_layer=args.num_convlayers,
+                             emb_dim=args.hid_size,
+                             extra_in_dim=MAX_NUM_NODE_DICT[args.dataset],
+                             extra_encode_dim=args.extra_feature_hidden,
+                             drop_ratio=args.dropout,
+                             virtual_node=False,
+                             graph_pooling='sum')
     elif args.model.lower() == 'gine_alchemy':
         model = NetGINEAlchemy(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                                DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],

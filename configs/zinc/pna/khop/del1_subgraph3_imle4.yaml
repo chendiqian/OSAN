@@ -10,7 +10,7 @@ fixed:
     sample_policy: khop_global_dual
     sample_k: 1
     num_subgraphs: 3
-    remove_node: False
+    remove_node: True
     add_full_graph: True
     sample_with_esan: False
 

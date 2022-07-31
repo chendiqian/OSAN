@@ -1,4 +1,4 @@
-from .esan_zinc_model import ZincAtomEncoder, GNN, DSnetwork
+from .esan_model import ZincAtomEncoder, GNN, DSnetwork
 from .GINE_gnn import NetGINE, NetGINE_ordered
 from .GCN_embd import GCN_emb
 from .GCN_edge_embd import GCN_edge_emb
@@ -72,11 +72,11 @@ def get_model(args, train_set):
                            args.hid_size,
                            args.num_convlayers,
                            DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
-    elif args.model.lower() == 'zincgin':  # ESAN's model
-        subgraph_gnn = GNN(gnn_type=args.model, num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
-                           num_layer=args.num_convlayers, in_dim=args.hid_size,
+    elif args.model.lower() == 'dsnet':  # ESAN's model
+        subgraph_gnn = GNN(gnn_type=args.gnn_type, num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
+                           num_layer=args.num_convlayers, in_dim=DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                            emb_dim=args.hid_size, drop_ratio=args.dropout, JK=args.jk,
-                           graph_pooling='mean', feature_encoder=ZincAtomEncoder(policy=None, emb_dim=args.hid_size)
+                           graph_pooling='sum' if args.gnn_type != 'gin' else 'mean',
                            )
         model = DSnetwork(subgraph_gnn=subgraph_gnn,
                           channels=args.channels,

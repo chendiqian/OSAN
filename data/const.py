@@ -11,6 +11,7 @@ DATASET_FEATURE_STAT_DICT = {
     'ogbg-moltox21': {'node': 9, 'edge': 3, 'num_class': 12},  # binary classification, but 12 tasks
     'qm9': {'node': 11, 'edge': 5, 'num_class': 12},  # regression, 12 labels
     'exp': {'node': 1, 'edge': 0, 'num_class': 1},  # bin classification
+    'protein': {'node': 3, 'edge': 0, 'num_class': 1},  # bin classification
 }
 
 MAX_NUM_NODE_DICT = {
@@ -27,6 +28,7 @@ TASK_TYPE_DICT = {
     'ogbg-moltox21': 'rocauc',
     'qm9': 'regression',
     'exp': 'acc',
+    'protein': 'rocauc',
 }
 
 CRITERION_DICT = {
@@ -38,4 +40,5 @@ CRITERION_DICT = {
     'ogbg-moltox21': nn.BCEWithLogitsLoss(),
     'qm9': nn.L1Loss(),
     'exp': nn.BCEWithLogitsLoss(),
+    'protein': nn.BCEWithLogitsLoss(),
 }

@@ -15,7 +15,8 @@ from data.const import MAX_NUM_NODE_DICT
 from data.planarsatpairsdataset import PlanarSATPairsDataset
 from data.custom_dataloader import MYDataLoader
 from data.data_utils import AttributedDataLoader
-from data.data_preprocess import GraphToUndirected, GraphCoalesce, AugmentwithLineGraph, AugmentwithKhopList, AugmentwithAdj
+from data.data_preprocess import GraphToUndirected, GraphCoalesce, AugmentwithLineGraph, AugmentwithKhopList, \
+    AugmentwithAdj
 from subgraph.subgraph_policy import policy2transform, RawNodeSampler, RawEdgeSampler, RawKhopSampler, \
     RawGreedyExpand, RawMSTSampler, RawKhopDualSampler
 
@@ -30,7 +31,8 @@ TRANSFORM_DICT = {'node': RawNodeSampler,
 
 NAME_DICT = {'zinc': "ZINC_full",
              'mutag': "MUTAG",
-             'alchemy': "alchemy_full"}
+             'alchemy': "alchemy_full",
+             'protein': 'PROTEINS_full'}
 
 
 def get_pretransform(args: Union[Namespace, ConfigDict]):
@@ -94,9 +96,11 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[L
     elif args.dataset.lower() == 'qm9':
         train_set, val_set, test_set, mean, std, sample_collator = get_qm9(args, device)
     elif args.dataset.lower() in ['exp', 'cexp']:
-        train_set, val_set, test_set, mean, std, sample_collator = get_synthdata(args)
+        train_set, val_set, test_set, mean, std, sample_collator = GetKfoldData()(args, PlanarSATPairsDataset, 10)
     elif args.dataset.lower() in ['zinc', 'alchemy']:
         train_set, val_set, test_set, mean, std, sample_collator = get_TUdata(args, device)
+    elif args.dataset.lower() in ['protein']:
+        train_set, val_set, test_set, mean, std, sample_collator = GetKfoldData()(args, TUDataset, 10)
     else:
         raise ValueError
 
@@ -301,23 +305,50 @@ def get_qm9(args, device):
     return train_set, val_set, test_set, mean, std, sample_collator
 
 
-def get_synthdata(args):
-    pre_transform, postfix = get_pretransform(args)
-    pre_transform = Compose([GraphToUndirected(), GraphCoalesce(), pre_transform])
+class GetKfoldData:
+    def __call__(self, args, dataset_class, num_fold):
+        pre_transform, postfix = get_pretransform(args)
+        pre_transform = Compose([GraphToUndirected(), GraphCoalesce(), pre_transform])
 
-    data_path = os.path.join(args.data_path, args.dataset.upper())
-    if postfix is not None:
-        data_path = os.path.join(data_path, postfix)
-    transform, sample_collator = get_transform(args)
+        data_path = os.path.join(args.data_path, args.dataset.upper())
+        if postfix is not None:
+            data_path = os.path.join(data_path, postfix)
+        transform, sample_collator = get_transform(args)
 
-    dataset = PlanarSATPairsDataset(data_path,
-                                    transform=transform,
-                                    pre_transform=pre_transform)
-    dataset.data.y = dataset.data.y[:, None]
+        dataset = self.get_data(dataset_class, data_path, transform, pre_transform, args.dataset.lower())
 
-    def separate_data(fold_idx):
-        # code taken from GIN and adapted
-        # since we only consider train and valid, use valid as test
+        if dataset.data.y.ndim == 1:
+            dataset.data.y = dataset.data.y[:, None]
+
+        train_sets, val_sets, test_sets = [], [], []
+        for idx in range(num_fold):
+            train, val, test = self.separate_data(idx, dataset)
+            train_set = dataset[train]
+            val_set = dataset[val]
+            test_set = dataset[test]
+
+            train_sets.append(train_set)
+            val_sets.append(val_set)
+            test_sets.append(test_set)
+
+        return train_sets, val_sets, test_sets, None, None, sample_collator
+
+    def get_data(self, dataset_class, data_path, transform, pre_transform, dataset_name):
+        if dataset_class == PlanarSATPairsDataset:
+            dataset = PlanarSATPairsDataset(data_path,
+                                            transform=transform,
+                                            pre_transform=pre_transform)
+        elif dataset_class == TUDataset:
+            dataset = TUDataset(data_path,
+                                name=NAME_DICT[dataset_name],
+                                transform=transform,
+                                pre_transform=pre_transform)
+        else:
+            raise NotImplementedError
+        return dataset
+
+    @classmethod
+    def separate_data(cls, fold_idx, dataset):
         assert 0 <= fold_idx < 10, "fold_idx must be from 0 to 9."
         skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
 
@@ -328,16 +359,3 @@ def get_synthdata(args):
         train_idx, test_idx = idx_list[fold_idx]
 
         return torch.tensor(train_idx), torch.tensor(test_idx), torch.tensor(test_idx)
-
-    train_sets, val_sets, test_sets = [], [], []
-    for idx in range(10):
-        train, val, test = separate_data(idx)
-        train_set = dataset[train]
-        val_set = dataset[val]
-        test_set = dataset[test]
-
-        train_sets.append(train_set)
-        val_sets.append(val_set)
-        test_sets.append(test_set)
-
-    return train_sets, val_sets, test_sets, None, None, sample_collator

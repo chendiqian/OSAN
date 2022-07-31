@@ -4,8 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GraphConv, MessagePassing, GINConv
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool, GlobalAttention
-from torch_geometric.typing import OptPairTensor, Adj, OptTensor, Size
-from torch_sparse import SparseTensor, matmul
+from torch_geometric.typing import OptPairTensor, Adj
 from torch_scatter import scatter
 
 
@@ -237,7 +236,7 @@ class GNN(torch.nn.Module):
         self.drop_ratio = drop_ratio
         self.JK = JK
         self.emb_dim = emb_dim
-        self.out_dim = self.emb_dim if self.JK == 'last' else self.emb_dim * self.num_layer + in_dim
+        self.out_dim = self.emb_dim if self.JK == 'last' else self.emb_dim * (self.num_layer + 1)
         self.num_tasks = num_tasks
         self.graph_pooling = graph_pooling
 
@@ -299,13 +298,13 @@ class DSnetwork(torch.nn.Module):
         fc_list = []
         fc_sum_list = []
         for i in range(len(channels)):
-            fc_list.append(torch.nn.Linear(in_features=channels[i] if i > 0 else subgraph_gnn.out_dim,
+            fc_list.append(torch.nn.Linear(in_features=channels[i - 1] if i > 0 else subgraph_gnn.out_dim,
                                            out_features=channels[i]))
             if self.invariant:
                 fc_sum_list.append(torch.nn.Linear(in_features=channels[i],
                                                    out_features=channels[i]))
             else:
-                fc_sum_list.append(torch.nn.Linear(in_features=channels[i],
+                fc_sum_list.append(torch.nn.Linear(in_features=channels[i - 1] if i > 0 else subgraph_gnn.out_dim,
                                                    out_features=channels[i]))
 
         self.fc_list = torch.nn.ModuleList(fc_list)
@@ -320,6 +319,11 @@ class DSnetwork(torch.nn.Module):
     def forward(self, batched_data):
         h_subgraph = self.subgraph_gnn(batched_data)
 
+        if hasattr(batched_data, 'inter_graph_idx'):
+            batch_idx = batched_data.inter_graph_idx
+        else:
+            batch_idx = torch.arange(h_subgraph.shape[0], device=h_subgraph.device)
+
         if self.invariant:
             for layer_idx, (fc, fc_sum) in enumerate(zip(self.fc_list, self.fc_sum_list)):
                 x1 = fc(h_subgraph)
@@ -327,20 +331,20 @@ class DSnetwork(torch.nn.Module):
                 h_subgraph = F.elu(x1)
 
             # aggregate to obtain a representation of the graph given the representations of the subgraphs
-            h_graph = scatter(src=h_subgraph, index=batched_data.inter_graph_idx, dim=0, reduce="mean")
+            h_graph = scatter(src=h_subgraph, index=batch_idx, dim=0, reduce="mean")
             for layer_idx, fc_sum in enumerate(self.fc_sum_list):
                 h_graph = F.elu(fc_sum(h_graph))
         else:
             for layer_idx, (fc, fc_sum) in enumerate(zip(self.fc_list, self.fc_sum_list)):
                 x1 = fc(h_subgraph)
                 x2 = fc_sum(
-                    scatter(src=h_subgraph, index=batched_data.inter_graph_idx, dim=0, reduce="mean")
+                    scatter(src=h_subgraph, index=batch_idx, dim=0, reduce="mean")
                 )
 
-                h_subgraph = F.elu(x1 + x2[batched_data.inter_graph_idx])
+                h_subgraph = F.elu(x1 + x2[batch_idx])
 
             # aggregate to obtain a representation of the graph given the representations of the subgraphs
-            h_graph = scatter(src=h_subgraph, index=batched_data.inter_graph_idx, dim=0, reduce="mean")
+            h_graph = scatter(src=h_subgraph, index=batch_idx, dim=0, reduce="mean")
 
         return self.final_layers(h_graph)
 

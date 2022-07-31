@@ -20,7 +20,7 @@ def get_model(args, train_set):
                         jk=args.gnn_jk,
                         num_class=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
     elif args.model.lower() == 'gine_ordered_forward':
-        model = NetGINE_ordered(DATASET_FEATURE_STAT_DICT[args.dataset]['node'] + MAX_NUM_NODE_DICT[args.dataset],
+        model = NetGINE_ordered(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
                                 DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                                 args.hid_size,
                                 MAX_NUM_NODE_DICT[args.dataset],

@@ -23,6 +23,8 @@ def get_model(args, train_set):
         model = NetGINE_ordered(DATASET_FEATURE_STAT_DICT[args.dataset]['node'] + MAX_NUM_NODE_DICT[args.dataset],
                                 DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
                                 args.hid_size,
+                                MAX_NUM_NODE_DICT[args.dataset],
+                                args.extra_feature_hidden,
                                 args.dropout,
                                 args.num_convlayers,
                                 jk=args.gnn_jk,

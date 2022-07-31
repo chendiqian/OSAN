@@ -1,5 +1,6 @@
 import torch
 from torch.nn import Linear, ReLU
+import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, MessagePassing, global_add_pool
 from torch_scatter import scatter
 
@@ -128,9 +129,48 @@ class NetGINE(torch.nn.Module):
 
 
 class NetGINE_ordered(NetGINE):
+    def __init__(self, input_dims,
+                 edge_features,
+                 dim,
+                 extra_in_dim,
+                 extra_encode_dim,
+                 dropout,
+                 num_convlayers,
+                 jk=None,
+                 num_class=1):
+        super(NetGINE, self).__init__()
+
+        self.dropout = dropout
+        self.jk = jk
+        assert num_convlayers > 1
+
+        self.encode_x = torch.nn.Linear(input_dims, dim)
+        self.encode_extra = torch.nn.Linear(extra_in_dim, extra_encode_dim)
+
+        self.conv = torch.nn.ModuleList([GINEConv(edge_features, dim + extra_encode_dim, dim)])
+        self.bn = torch.nn.ModuleList([torch.nn.BatchNorm1d(dim)])
+
+        for _ in range(num_convlayers - 1):
+            self.conv.append(GINEConv(edge_features, dim, dim))
+            self.bn.append(torch.nn.BatchNorm1d(dim))
+
+        if self.jk == 'concat':
+            self.fc1 = Linear(num_convlayers * dim, dim)
+        elif self.jk == 'residual' or self.jk is None:
+            self.fc1 = Linear(dim, dim)
+        else:
+            raise ValueError(f"Unsupported jumping connection type{self.jk}")
+
+        self.fc2 = Linear(dim, dim)
+        self.fc3 = Linear(dim, dim)
+        self.fc4 = Linear(dim, num_class)
+
     def forward(self, data):
         x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         extra_feature = data.extra_feature
+
+        x = F.relu(self.encode_x(x))
+        extra_feature = F.relu(self.encode_extra(extra_feature))
         x = torch.cat([x, extra_feature], dim=-1)
 
         intermediate_x = [] if self.jk == 'concat' else None
@@ -147,7 +187,7 @@ class NetGINE_ordered(NetGINE):
         assert data.selected_node_masks.dtype == torch.float
         x = x * data.selected_node_masks[:, None]
 
-        x = global_mean_pool(x, data.original_node_mask)
+        x = global_add_pool(x, data.original_node_mask)
 
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
@@ -155,3 +195,16 @@ class NetGINE_ordered(NetGINE):
         x = global_mean_pool(x, data.inter_graph_idx)
         x = self.fc4(x)
         return x
+
+    def reset_parameters(self):
+        self.encode_extra.reset_parameters()
+        self.encode_x.reset_parameters()
+
+        for l in self.conv:
+            l.reset_parameters()
+        for l in self.bn:
+            l.reset_parameters()
+        self.fc1.reset_parameters()
+        self.fc2.reset_parameters()
+        self.fc3.reset_parameters()
+        self.fc4.reset_parameters()

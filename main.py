@@ -65,14 +65,13 @@ def prepare_exp(folder_name: str, num_run: int, num_fold: int) -> Tuple[SummaryW
 @ex.automain
 def run(fixed):
     fixed = dict(fixed)
-    if not ('no_default' in fixed and fixed['no_default']):
-        with open(f"./configs/{fixed['dataset'].lower()}/common_configs.yaml", 'r') as stream:
-            try:
-                common_configs = yaml.safe_load(stream)['common']
-                default_configs = {k: v for k, v in common_configs.items() if k not in fixed}
-                fixed.update(default_configs)
-            except yaml.YAMLError as exc:
-                print(exc)
+    with open(f"./configs/{fixed['dataset'].lower()}/common_configs.yaml", 'r') as stream:
+        try:
+            common_configs = yaml.safe_load(stream)['common']
+            default_configs = {k: v for k, v in common_configs.items() if k not in fixed}
+            fixed.update(default_configs)
+        except yaml.YAMLError as exc:
+            print(exc)
 
     args = ConfigDict(fixed)
     hparams = naming(args)

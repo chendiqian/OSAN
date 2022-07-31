@@ -1,27 +1,16 @@
 fixed:
-  no_default: True
-
   dataset: 'zinc'
   log_path: './logs'
   voting: 5
 
-  debug: False
-  num_runs: 5
-  data_path: './datasets'
-  model: 'zincgin'
+  model: 'dsnet'
+  gnn_type: 'zincgin'
   num_convlayers: 4
   hid_size: 64
   batch_size: 128
-  lr: 1.e-3
-  min_epochs: 700
-  max_epochs: 1000
-  patience: 100
-  lr_steps: [ 400, 600 ]
+
   jk: 'concat'
-  dropout: 0.
-  reg: 0.
   channels: [96, 96]
-  normalize_label: False
 
   sample_configs:
     sample_policy: edge

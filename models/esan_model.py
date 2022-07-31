@@ -1,8 +1,11 @@
 # https://github.com/beabevi/ESAN/blob/master/models.py
+from typing import Union, Optional
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import GraphConv, MessagePassing
+from torch_geometric.nn import GraphConv, MessagePassing, GINConv
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool, GlobalAttention
+from torch_geometric.typing import OptPairTensor, Adj, OptTensor, Size
+from torch_sparse import SparseTensor, matmul
 from torch_scatter import scatter
 
 
@@ -60,6 +63,50 @@ class ZINCGINConv(MessagePassing):
         self.bond_encoder.reset_parameters()
 
 
+class MyPyGINConv(GINConv):
+    def forward(self, x: Union[torch.Tensor, OptPairTensor],
+                edge_index: Adj,
+                edge_attr: torch.Tensor,
+                edge_weight: Optional[torch.Tensor]) -> torch.Tensor:
+        """"""
+        if isinstance(x, torch.Tensor):
+            x = (x, x)
+
+        # propagate_type: (x: OptPairTensor)
+        out = self.propagate(edge_index, x=x[0], edge_weight=edge_weight,)
+
+        x_r = x[1]
+        if x_r is not None:
+            out += (1 + self.eps) * x_r
+
+        return self.nn(out)
+
+    def message(self, x_j: torch.Tensor, edge_weight: Optional[torch.Tensor]) -> torch.Tensor:
+        return x_j if edge_weight is None else x_j * edge_weight[:, None]
+
+    # def message_and_aggregate(self, adj_t: SparseTensor, x: OptPairTensor) -> torch.Tensor:
+    #     adj_t = adj_t.set_value(None, layout=None)
+    #     return matmul(adj_t, x[0], reduce=self.aggr)
+
+
+class OriginalGINConv(torch.nn.Module):
+    def __init__(self, in_dim, emb_dim):
+        super(OriginalGINConv, self).__init__()
+        mlp = torch.nn.Sequential(
+            torch.nn.Linear(in_dim, emb_dim),
+            torch.nn.BatchNorm1d(emb_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(emb_dim, emb_dim)
+        )
+        self.layer = MyPyGINConv(nn=mlp, train_eps=False)
+
+    def forward(self, x, edge_index, edge_attr, edge_weight):
+        return self.layer(x, edge_index, edge_attr, edge_weight)
+
+    def reset_parameters(self):
+        self.layer.reset_parameters()
+
+
 class GNN_node(torch.nn.Module):
     """
     Output:
@@ -67,7 +114,7 @@ class GNN_node(torch.nn.Module):
     """
 
     def __init__(self, num_layer, in_dim, emb_dim, drop_ratio=0.5, JK="last", residual=False, gnn_type='gin',
-                 num_random_features=0, feature_encoder=None):
+                 num_random_features=0):
 
         super(GNN_node, self).__init__()
         self.num_layer = num_layer
@@ -80,7 +127,7 @@ class GNN_node(torch.nn.Module):
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")
 
-        self.atom_encoder = feature_encoder
+        self.atom_encoder = torch.nn.Linear(in_dim, emb_dim)
         self.num_random_features = num_random_features
 
         if num_random_features > 0:
@@ -102,9 +149,9 @@ class GNN_node(torch.nn.Module):
             elif gnn_type == 'gcn':
                 raise NotImplementedError
             elif gnn_type == 'originalgin':
-                raise NotImplementedError
+                self.convs.append(OriginalGINConv(emb_dim, emb_dim))
             elif gnn_type == 'zincgin':
-                self.convs.append(ZINCGINConv(emb_dim if layer != 0 else in_dim, emb_dim))
+                self.convs.append(ZINCGINConv(emb_dim, emb_dim))
             elif gnn_type == 'graphconv':
                 raise NotImplementedError
             else:
@@ -182,8 +229,7 @@ def subgraph_pool(h_node, batched_data, pool):
 class GNN(torch.nn.Module):
 
     def __init__(self, num_tasks, num_layer=5, in_dim=300, emb_dim=300,
-                 gnn_type='gin', num_random_features=0, residual=False, drop_ratio=0.5, JK="last", graph_pooling="mean",
-                 feature_encoder=lambda x: x):
+                 gnn_type='gin', num_random_features=0, residual=False, drop_ratio=0.5, JK="last", graph_pooling="mean"):
 
         super(GNN, self).__init__()
 
@@ -200,8 +246,7 @@ class GNN(torch.nn.Module):
 
         # GNN to generate node embeddings
         self.gnn_node = GNN_node(num_layer, in_dim, emb_dim, JK=JK, drop_ratio=drop_ratio, residual=residual,
-                                 gnn_type=gnn_type, num_random_features=num_random_features,
-                                 feature_encoder=feature_encoder)
+                                 gnn_type=gnn_type, num_random_features=num_random_features)
 
         # Pooling function to generate whole-graph embeddings
         if self.graph_pooling == "sum":
@@ -254,13 +299,13 @@ class DSnetwork(torch.nn.Module):
         fc_list = []
         fc_sum_list = []
         for i in range(len(channels)):
-            fc_list.append(torch.nn.Linear(in_features=channels[i - 1] if i > 0 else subgraph_gnn.out_dim,
+            fc_list.append(torch.nn.Linear(in_features=channels[i] if i > 0 else subgraph_gnn.out_dim,
                                            out_features=channels[i]))
             if self.invariant:
                 fc_sum_list.append(torch.nn.Linear(in_features=channels[i],
                                                    out_features=channels[i]))
             else:
-                fc_sum_list.append(torch.nn.Linear(in_features=channels[i - 1] if i > 0 else subgraph_gnn.out_dim,
+                fc_sum_list.append(torch.nn.Linear(in_features=channels[i],
                                                    out_features=channels[i]))
 
         self.fc_list = torch.nn.ModuleList(fc_list)

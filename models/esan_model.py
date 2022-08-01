@@ -2,10 +2,13 @@
 from typing import Union, Optional
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import GraphConv, MessagePassing, GINConv
+from torch_geometric.nn import GraphConv, MessagePassing
+from torch_geometric.nn import GINConv as PyGINConv
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool, GlobalAttention
 from torch_geometric.typing import OptPairTensor, Adj
 from torch_scatter import scatter
+
+from .ogb_mol_conv import GINConv
 
 
 class ZincAtomEncoder(torch.nn.Module):
@@ -62,7 +65,7 @@ class ZINCGINConv(MessagePassing):
         self.bond_encoder.reset_parameters()
 
 
-class MyPyGINConv(GINConv):
+class MyPyGINConv(PyGINConv):
     def forward(self, x: Union[torch.Tensor, OptPairTensor],
                 edge_index: Adj,
                 edge_attr: torch.Tensor,
@@ -144,7 +147,7 @@ class GNN_node(torch.nn.Module):
 
         for layer in range(num_layer):
             if gnn_type == 'gin':
-                raise NotImplementedError
+                self.convs.append(GINConv(emb_dim, emb_dim))
             elif gnn_type == 'gcn':
                 raise NotImplementedError
             elif gnn_type == 'originalgin':

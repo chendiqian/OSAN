@@ -177,15 +177,15 @@ class PNANet_order(torch.nn.Module):
                               Linear(hidden_dim // 2, num_class))
 
     def forward(self, data):
-        x, edge_index, edge_attr, edge_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         extra_feature = data.extra_feature
-        extra_feature = F.relu(self.encode_extra(extra_feature))
+        extra_feature = F.relu(self.extra_emb(extra_feature))
         x = self.node_emb(x)
         x = torch.cat([x, extra_feature], dim=-1)
         edge_attr = self.edge_emb(edge_attr)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.relu(batch_norm(conv(x, edge_index, edge_attr, edge_weight)))
+            x = F.relu(batch_norm(conv(x, edge_index, edge_attr, None)))
 
         assert data.selected_node_masks.dtype == torch.float
         x = x * data.selected_node_masks[:, None]

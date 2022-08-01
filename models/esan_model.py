@@ -276,9 +276,12 @@ class GNN(torch.nn.Module):
             else:
                 raise ValueError
 
-            num_nodes = scatter(data.selected_node_masks.detach(), data.batch, dim=0, reduce="sum")
-            h_graph = global_add_pool(h_node, data.batch)
-            h_graph = h_graph / num_nodes[:, None]
+            if self.graph_pooling == "mean":
+                num_nodes = scatter(data.selected_node_masks.detach(), data.batch, dim=0, reduce="sum")
+                h_graph = global_add_pool(h_node, data.batch)
+                h_graph = h_graph / num_nodes[:, None]
+            else:
+                h_graph = self.pool(h_node, data.batch)
         else:
             h_graph = self.pool(h_node, data.batch)
         return h_graph

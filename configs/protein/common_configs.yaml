@@ -6,14 +6,14 @@ common:
   lr: 1.e-3
   lr_steps: [ 150, 300 ]
   patience: 100
-  dropout: 0.5
+  dropout: 0.
   reg: 0.
   num_convlayers: 4
   jk: 'concat'
-  channels: [32, 32]
+  channels: [64, 64]
   batch_size: 128
   min_epochs: 300
   max_epochs: 400
   data_path: './datasets'
   debug: False
-  num_runs: 3
+  num_runs: 5

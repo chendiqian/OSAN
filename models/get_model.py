@@ -1,4 +1,4 @@
-from .esan_model import ZincAtomEncoder, GNN, DSnetwork
+from .esan_model import GNN, DSnetwork
 from .GINE_gnn import NetGINE, NetGINE_ordered
 from .GCN_embd import GCN_emb
 from .GCN_edge_embd import GCN_edge_emb
@@ -6,7 +6,7 @@ from .GIN_embd import GINE_embd
 from .GINE_alchemy import NetGINEAlchemy
 from .ogb_mol_gnn import OGBGNN, OGBGNN_order
 from .GINE_qm9 import NetGINE_QM
-from .pna import PNANet
+from .pna import PNANet, PNANet_order
 from data.const import DATASET_FEATURE_STAT_DICT, MAX_NUM_NODE_DICT
 
 
@@ -90,6 +90,16 @@ def get_model(args, train_set):
                        args.edge_hid_size,
                        args.num_convlayers,
                        DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
+    elif args.model.lower() == 'pna_ordered':
+        model = PNANet_order(train_set,
+                             DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                             MAX_NUM_NODE_DICT[args.dataset],
+                             args.extra_feature_hidden,
+                             DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                             args.hid_size,
+                             args.edge_hid_size,
+                             args.num_convlayers,
+                             DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
     else:
         raise NotImplementedError
 

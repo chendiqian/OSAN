@@ -1,8 +1,4 @@
 fixed:
-  model: pna
-  hid_size: 128
-  edge_hid_size: 64
-
   dataset: zinc
   log_path: './logs'
   voting: 1

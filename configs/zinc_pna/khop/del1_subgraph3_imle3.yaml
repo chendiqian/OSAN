@@ -1,15 +1,11 @@
 fixed:
-  model: pna
-  hid_size: 128
-  edge_hid_size: 64
-
   dataset: zinc
   log_path: './logs'
   voting: 5
 
   sample_configs:
-    sample_policy: edge
-    sample_k: -10
+    sample_policy: khop_global_dual
+    sample_k: 1
     num_subgraphs: 3
     remove_node: False
     add_full_graph: True
@@ -23,4 +19,4 @@ fixed:
     norm_logits: False
     noise_scale: 1.
     beta: 10.
-    aux_loss_weight: 1.
+    aux_loss_weight: 0.1

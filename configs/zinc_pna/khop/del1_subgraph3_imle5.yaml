@@ -1,7 +1,4 @@
 fixed:
-  model: pna
-  hid_size: 128
-  edge_hid_size: 64
   dataset: zinc
   log_path: './logs'
   voting: 5
@@ -22,4 +19,4 @@ fixed:
     norm_logits: False
     noise_scale: 1.
     beta: 10.
-    aux_loss_weight: 0.1
+    aux_loss_weight: 1.

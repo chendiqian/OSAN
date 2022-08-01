@@ -1,5 +1,6 @@
 fixed:
   dataset: zinc
+  config_root: zinc_pna
   log_path: './logs'
   voting: 5
 

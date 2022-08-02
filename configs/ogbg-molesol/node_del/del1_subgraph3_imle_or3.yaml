@@ -4,8 +4,8 @@ fixed:
   voting: 5
 
   sample_configs:
-    sample_policy: edge
-    sample_k: -3
+    sample_policy: or
+    sample_k: -1
     num_subgraphs: 3
     remove_node: False
     add_full_graph: True
@@ -13,10 +13,10 @@ fixed:
 
   imle_configs:
     embd_lr: 1.e-3
-    reg_embd: 1.e-4
+    reg_embd: 0.
     imle_sample_rand: False
     micro_batch_embd: 1
     norm_logits: False
     noise_scale: 1.
-    beta: 1.
-    aux_loss_weight: 0.1
+    beta: 10.
+    aux_loss_weight: 10.

@@ -1,7 +1,10 @@
 fixed:
   dataset: ogbg-molesol
-  log_path: './logs'
+  log_path: './logs_decay'
   voting: 5
+  lr_steps: [ 150, 300 ]
+  min_epochs: 300
+  max_epochs: 500
 
   sample_configs:
     sample_policy: edge
@@ -18,5 +21,5 @@ fixed:
     micro_batch_embd: 1
     norm_logits: False
     noise_scale: 1.
-    beta: 10.
+    beta: 1.
     aux_loss_weight: 10.

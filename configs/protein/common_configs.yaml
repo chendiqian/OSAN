@@ -1,5 +1,6 @@
 common:
   model: dsnet
+  num_folds: 1
   gnn_type: originalgin
   normalize_label: False
   hid_size: 32

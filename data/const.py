@@ -28,7 +28,7 @@ TASK_TYPE_DICT = {
     'ogbg-moltox21': 'rocauc',
     'qm9': 'regression',
     'exp': 'acc',
-    'protein': 'rocauc',
+    'protein': 'acc',
 }
 
 CRITERION_DICT = {

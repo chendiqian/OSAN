@@ -6,6 +6,7 @@ from ml_collections import ConfigDict
 import torch
 import numpy as np
 from torch import device as torchdevice
+from torch.utils.data import random_split
 from torch_geometric.datasets import TUDataset, QM9
 from torch_geometric.transforms import Compose, Distance
 from ogb.graphproppred import PygGraphPropPredDataset
@@ -100,7 +101,8 @@ def get_data(args: Union[Namespace, ConfigDict], device: torchdevice) -> Tuple[L
     elif args.dataset.lower() in ['zinc', 'alchemy']:
         train_set, val_set, test_set, mean, std, sample_collator = get_TUdata(args, device)
     elif args.dataset.lower() in ['protein']:
-        train_set, val_set, test_set, mean, std, sample_collator = GetKfoldData()(args, TUDataset, 10)
+        # follows https://github.com/dmlc/dgl/blob/master/examples/pytorch/hgp_sl/main.py splits
+        train_set, val_set, test_set, mean, std, sample_collator = GetRandomSplitData()(args, TUDataset, args.num_folds)
     else:
         raise ValueError
 
@@ -305,7 +307,30 @@ def get_qm9(args, device):
     return train_set, val_set, test_set, mean, std, sample_collator
 
 
-class GetKfoldData:
+class CrossValidation:
+    def __call__(self, args, dataset_class, num_fold):
+        raise NotImplementedError
+
+    def get_data(self, dataset_class, data_path, transform, pre_transform, dataset_name):
+        if dataset_class == PlanarSATPairsDataset:
+            dataset = PlanarSATPairsDataset(data_path,
+                                            transform=transform,
+                                            pre_transform=pre_transform)
+        elif dataset_class == TUDataset:
+            dataset = TUDataset(data_path,
+                                name=NAME_DICT[dataset_name],
+                                transform=transform,
+                                pre_transform=pre_transform)
+        else:
+            raise NotImplementedError
+        return dataset
+
+    @classmethod
+    def separate_data(cls, fold_idx, dataset):
+        raise NotImplementedError
+
+
+class GetKfoldData(CrossValidation):
     def __call__(self, args, dataset_class, num_fold):
         pre_transform, postfix = get_pretransform(args)
         pre_transform = Compose([GraphToUndirected(), GraphCoalesce(), pre_transform])
@@ -333,20 +358,6 @@ class GetKfoldData:
 
         return train_sets, val_sets, test_sets, None, None, sample_collator
 
-    def get_data(self, dataset_class, data_path, transform, pre_transform, dataset_name):
-        if dataset_class == PlanarSATPairsDataset:
-            dataset = PlanarSATPairsDataset(data_path,
-                                            transform=transform,
-                                            pre_transform=pre_transform)
-        elif dataset_class == TUDataset:
-            dataset = TUDataset(data_path,
-                                name=NAME_DICT[dataset_name],
-                                transform=transform,
-                                pre_transform=pre_transform)
-        else:
-            raise NotImplementedError
-        return dataset
-
     @classmethod
     def separate_data(cls, fold_idx, dataset):
         assert 0 <= fold_idx < 10, "fold_idx must be from 0 to 9."
@@ -359,3 +370,38 @@ class GetKfoldData:
         train_idx, test_idx = idx_list[fold_idx]
 
         return torch.tensor(train_idx), torch.tensor(test_idx), torch.tensor(test_idx)
+
+
+class GetRandomSplitData(CrossValidation):
+    def __call__(self, args, dataset_class, num_fold):
+        pre_transform, postfix = get_pretransform(args)
+        pre_transform = Compose([GraphToUndirected(), GraphCoalesce(), pre_transform])
+
+        data_path = os.path.join(args.data_path, args.dataset.upper())
+        if postfix is not None:
+            data_path = os.path.join(data_path, postfix)
+        transform, sample_collator = get_transform(args)
+
+        dataset = self.get_data(dataset_class, data_path, transform, pre_transform, args.dataset.lower())
+
+        if dataset.data.y.ndim == 1:
+            dataset.data.y = dataset.data.y[:, None]
+
+        train_sets, val_sets, test_sets = [], [], []
+        for idx in range(num_fold):
+            train_set, val_set, test_set = self.separate_data(idx, dataset)
+
+            train_sets.append(train_set)
+            val_sets.append(val_set)
+            test_sets.append(test_set)
+
+        return train_sets, val_sets, test_sets, None, None, sample_collator
+
+    @classmethod
+    def separate_data(cls, fold_idx, dataset):
+        num_training = int(len(dataset) * 0.8)
+        num_val = int(len(dataset) * 0.1)
+        num_test = len(dataset) - num_val - num_training
+        train_set, val_set, test_set = random_split(dataset, [num_training, num_val, num_test],
+                                                    generator=torch.Generator().manual_seed(fold_idx))  # fixed seed
+        return train_set, val_set, test_set

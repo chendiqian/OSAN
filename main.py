@@ -57,6 +57,7 @@ def naming(args) -> str:
 
 def prepare_exp(folder_name: str, num_run: int, num_fold: int) -> Tuple[SummaryWriter, str]:
     run_folder = os.path.join(folder_name, f'run{num_run}_fold{num_fold}_{str(datetime.now())}')
+    run_folder = run_folder.replace(":", ".")
     os.mkdir(run_folder)
     writer = SummaryWriter(run_folder)
     return writer, run_folder

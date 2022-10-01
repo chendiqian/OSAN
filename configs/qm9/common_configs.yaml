@@ -12,4 +12,4 @@ common:
   max_epochs: 1000
   data_path: './datasets'
   debug: False
-  num_runs: 5
+  num_runs: 3

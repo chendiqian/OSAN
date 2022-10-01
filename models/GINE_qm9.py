@@ -56,8 +56,6 @@ class NetGINE_QM(torch.nn.Module):
                  num_class=1):
         super(NetGINE_QM, self).__init__()
 
-        dim = dim
-
         self.conv = torch.nn.ModuleList([GINConv(edge_features, input_dims, dim)])
 
         for _ in range(num_convlayers - 1):
@@ -92,6 +90,58 @@ class NetGINE_QM(torch.nn.Module):
         return x
 
     def reset_parameters(self):
+        for l in self.conv:
+            l.reset_parameters()
+        self.set2set.reset_parameters()
+        self.fc1.reset_parameters()
+        self.fc4.reset_parameters()
+
+
+class NetGINE_QM_ordered(torch.nn.Module):
+    def __init__(self, input_dims,
+                 edge_features,
+                 dim,
+                 num_convlayers,
+                 extra_in_dim,
+                 extra_encode_dim,
+                 num_class=1):
+        super(NetGINE_QM_ordered, self).__init__()
+
+        self.encode_x = torch.nn.Linear(input_dims, dim)
+        self.encode_extra = torch.nn.Linear(extra_in_dim, extra_encode_dim)
+
+        self.conv = torch.nn.ModuleList([GINConv(edge_features, dim + extra_encode_dim, dim)])
+
+        for _ in range(num_convlayers - 1):
+            self.conv.append(GINConv(edge_features, dim, dim))
+
+        self.set2set = Set2Set(1 * dim, processing_steps=6)
+
+        self.fc1 = Linear(2 * dim, dim)
+        self.fc4 = Linear(dim, num_class)
+
+    def forward(self, data):
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
+        extra_feature = data.extra_feature
+        x = torch.relu(self.encode_x(x))
+        extra_feature = torch.relu(self.encode_extra(extra_feature))
+        x = torch.cat([x, extra_feature], dim=-1)
+
+        for l in self.conv:
+            x = torch.relu(l(x, edge_index, edge_attr, None))
+
+        assert data.selected_node_masks.dtype == torch.float
+        x = x * data.selected_node_masks[:, None]
+
+        x = self.set2set(x, data.original_node_mask)
+        x = torch.relu(self.fc1(x))
+        x = global_mean_pool(x, data.inter_graph_idx)
+        x = self.fc4(x)
+        return x
+
+    def reset_parameters(self):
+        self.encode_x.reset_parameters()
+        self.encode_extra.reset_parameters()
         for l in self.conv:
             l.reset_parameters()
         self.set2set.reset_parameters()

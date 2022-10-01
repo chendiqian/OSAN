@@ -5,7 +5,7 @@ from .GCN_edge_embd import GCN_edge_emb
 from .GIN_embd import GINE_embd
 from .GINE_alchemy import NetGINEAlchemy
 from .ogb_mol_gnn import OGBGNN, OGBGNN_order
-from .GINE_qm9 import NetGINE_QM
+from .GINE_qm9 import NetGINE_QM, NetGINE_QM_ordered
 from .pna import PNANet, PNANet_order
 from data.const import DATASET_FEATURE_STAT_DICT, MAX_NUM_NODE_DICT
 
@@ -72,6 +72,14 @@ def get_model(args, train_set):
                            args.hid_size,
                            args.num_convlayers,
                            DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
+    elif args.model.lower() == 'gine_qm9_ordered':
+        model = NetGINE_QM_ordered(DATASET_FEATURE_STAT_DICT[args.dataset]['node'],
+                                   DATASET_FEATURE_STAT_DICT[args.dataset]['edge'],
+                                   args.hid_size,
+                                   args.num_convlayers,
+                                   MAX_NUM_NODE_DICT[args.dataset.lower()],
+                                   args.extra_feature_hidden,
+                                   DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'])
     elif args.model.lower() == 'dsnet':  # ESAN's model
         subgraph_gnn = GNN(gnn_type=args.gnn_type, num_tasks=DATASET_FEATURE_STAT_DICT[args.dataset]['num_class'],
                            num_layer=args.num_convlayers, in_dim=DATASET_FEATURE_STAT_DICT[args.dataset]['node'],

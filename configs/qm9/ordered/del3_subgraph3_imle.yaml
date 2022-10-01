@@ -1,5 +1,5 @@
 fixed:
-  model: gine_ordered_forward
+  model: gine_qm9_ordered
   extra_feature_hidden: 32
   dataset: qm9
   log_path: './logs'

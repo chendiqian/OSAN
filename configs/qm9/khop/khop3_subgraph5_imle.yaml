@@ -7,7 +7,7 @@ fixed:
     sample_policy: khop_global
     sample_k: 3
     num_subgraphs: 5
-    remove_node: False
+    remove_node: True
     add_full_graph: True
     sample_with_esan: False
 

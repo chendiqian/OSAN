@@ -2,8 +2,6 @@
 # https://github.com/snap-stanford/ogb/blob/master/examples/graphproppred/mol/gnn.py
 import torch
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool, GlobalAttention, Set2Set
-from torch_geometric.nn.aggr.set2set import Set2Set as Typeset2set
-from torch_geometric.nn.glob import GlobalAttention as Typeglobalatten
 from torch_scatter import scatter
 
 from .ogb_mol_conv import GNN_node, GNN_node_Virtualnode, GNN_node_order
@@ -84,7 +82,7 @@ class OGBGNN(torch.nn.Module):
 
     def reset_parameters(self):
         self.gnn_node.reset_parameters()
-        if isinstance(self.pool, (Typeglobalatten, Typeset2set)):
+        if self.graph_pooling in ['set2set', 'attention']:
             self.pool.reset_parameters()
         self.graph_pred_linear.reset_parameters()
 
